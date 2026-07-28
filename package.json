@@ -2,7 +2,6 @@
   "name": "minicode",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
   "scripts": {
     "dev": "tsx src/index.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -19,5 +18,8 @@
     "tsx": "^4.23.1",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.65.0"
+  },
+  "dependencies": {
+    "openai": "^7.0.0"
   }
 }
