@@ -1,10 +1,10 @@
 import OpenAI from 'openai';
 import { TOOL_DEFINITIONS } from './tools/definitions.js'
 import { TOOL_HANDLERS } from './tools/handlers.js';
-type Message = OpenAI.Chat.Completions.ChatCompletionMessageParam[]
+type Message = OpenAI.Chat.Completions.ChatCompletionMessageParam
 export async function runAgentTurn(
   client: OpenAI,
-  messages: Message,
+  messages: Message[],
   maxTurns: 15
 ): Promise<string> {
 
@@ -38,7 +38,7 @@ export async function runAgentTurn(
       }
 
       const handler = TOOL_HANDLERS[toolName]
-      const result = handler ? handler(args) : { success: false, output: `未知工具${toolName}` }
+      const result = handler ? await handler(args) : { success: false, output: `未知工具${toolName}` }
 
       messages.push(
         {

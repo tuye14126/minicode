@@ -1,5 +1,6 @@
 import { execSync } from "node:child_process"
 import { readdirSync, readFileSync, writeFileSync } from "node:fs"
+import { buildUnifiedDiff, confirmDiff } from "../file-review.js"
 
 
 
@@ -8,7 +9,7 @@ type ToolResult = {
   output: string
 }
 
-export const TOOL_HANDLERS: Record<string, (args: any) => ToolResult> = {
+export const TOOL_HANDLERS: Record<string, (args: any) => ToolResult | Promise<ToolResult>> = {
   read_file: (args) => {
     try {
       const content = readFileSync(args.path, 'utf-8')
@@ -64,6 +65,73 @@ export const TOOL_HANDLERS: Record<string, (args: any) => ToolResult> = {
     } catch (e: any) {
       if (e.status === 1) return { success: true, output: "无匹配结果" }
       return { success: false, output: `搜索失败:${e.message}` }
+    }
+  },
+  edit_file: (args) => {
+    try {
+      const content = readFileSync(args.path, 'utf-8')
+      const lines = content.split('\n')
+      const matchIndex = lines.findIndex(line => line.includes(args.search))
+      if (matchIndex === -1) {
+        return {
+          success: false,
+          output: `在 ${args.path} 中未找到:\n  "${args.search}"`,
+        }
+      }
+      lines[matchIndex] = lines[matchIndex].replace(args.search, args.replace)
+      const newContent = lines.join('\n')
+
+      const diff = buildUnifiedDiff(args.path, content, newContent)
+      writeFileSync(args.path, newContent, 'utf-8')
+      return {
+        success: true,
+        output: `已修改 ${args.path} (第 ${matchIndex + 1} 行)\n${diff}`,
+      }
+    } catch (e: any) {
+      return { success: false, output: `编辑失败: ${e.message}` }
+    }
+  },
+  patch_file: (args) => {
+    try {
+      const content = readFileSync(args.path, 'utf-8')
+      let newContent = content
+
+      for (const r of args.replacements) {
+        if (!newContent.includes(r.search)) {
+          return {
+            success: false,
+            output: `未找到要替换的文本:\n  "${r.search}"`,
+          }
+        }
+        newContent = newContent.replace(r.search, r.replace)
+      }
+
+      const diff = buildUnifiedDiff(args.path, content, newContent)
+      writeFileSync(args.path, newContent, 'utf-8')
+
+      return {
+        success: true,
+        output: `已应用 ${args.replacements.length} 处替换:\n${diff}`,
+      }
+    } catch (e: any) {
+      return { success: false, output: `批量替换失败: ${e.message}` }
+    }
+  },
+  modify_file: async (args) => {
+    try {
+      let oldContent = ''
+      try {
+        oldContent = readFileSync(args.path, 'utf-8')
+      } catch { }
+      const diff = buildUnifiedDiff(args.path, oldContent, args.content)
+      if (diff) {
+        const ok = await confirmDiff(args.path, diff)
+        if (!ok) return { success: false, output: '用户拒绝了修改' }
+      }
+      writeFileSync(args.path, args.content, 'utf-8')
+      return { success: true, output: `${args.path} 已更新` }
+    } catch (e: any) {
+      return { success: false, output: `修改失败: ${e.message}` }
     }
   }
 }
