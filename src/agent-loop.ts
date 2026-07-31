@@ -25,7 +25,6 @@ export async function runAgentTurn(
       }
       return content
     }
-
     messages.push(replyMessage)
 
     for (const toolCall of toolCalls) {
@@ -38,14 +37,18 @@ export async function runAgentTurn(
       }
 
       const handler = TOOL_HANDLERS[toolName]
-      const result = handler ? await handler(args) : { success: false, output: `未知工具${toolName}` }
+      const result = handler
+        ? await handler(args, { workspace: process.cwd() })
+        : { success: false, output: `未知工具${toolName}` }
+      console.log(toolName);
 
       messages.push(
         {
           role: 'tool',
           tool_call_id: toolCall.id,
           content: JSON.stringify(result)
-        }
+        },
+
       )
 
     }

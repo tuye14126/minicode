@@ -1,7 +1,7 @@
 import { execSync } from "node:child_process"
 import { readdirSync, readFileSync, writeFileSync } from "node:fs"
 import { buildUnifiedDiff, confirmDiff } from "../file-review.js"
-
+import { checkCommandPermission, checkPathAccess } from "../permissions.js"
 
 
 type ToolResult = {
@@ -9,8 +9,18 @@ type ToolResult = {
   output: string
 }
 
-export const TOOL_HANDLERS: Record<string, (args: any) => ToolResult | Promise<ToolResult>> = {
-  read_file: (args) => {
+type ToolContext = {
+  workspace: string
+}
+
+type ToolHandler = (args: any, ctx: ToolContext) => ToolResult | Promise<ToolResult>
+
+export const TOOL_HANDLERS: Record<string, ToolHandler> = {
+  read_file: async (args, ctx) => {
+    const access = await checkPathAccess(args.path, ctx.workspace)
+    if (!access.allowed) {
+      return { success: false, output: access.output || '路径访问被拒绝' }
+    }
     try {
       const content = readFileSync(args.path, 'utf-8')
       return { success: true, output: content }
@@ -18,7 +28,11 @@ export const TOOL_HANDLERS: Record<string, (args: any) => ToolResult | Promise<T
       return { success: false, output: `读取文件失败: ${e.message}` }
     }
   },
-  write_file: (args) => {
+  write_file: async (args, ctx) => {
+    const access = await checkPathAccess(args.path, ctx.workspace)
+    if (!access.allowed) {
+      return { success: false, output: access.output || '路径访问被拒绝' }
+    }
     try {
       writeFileSync(args.path, args.content, 'utf-8')
       return { success: true, output: `文件${args.path}写入成功` }
@@ -26,8 +40,14 @@ export const TOOL_HANDLERS: Record<string, (args: any) => ToolResult | Promise<T
       return { success: false, output: `读取文件失败: ${e.message}` }
     }
   },
-  run_command: (args) => {
+  run_command: async (args, ctx) => {
+    const permission = await checkCommandPermission(args.command)
+    if (!permission.allowed) {
+      return { success: false, output: permission.output || '用户拒绝了命令执行' }
+    }
     try {
+      console.log(`执行命令${args.command}`);
+
       const output = execSync(args.command, {
         encoding: 'utf-8',
         timeout: 30000,
@@ -67,7 +87,11 @@ export const TOOL_HANDLERS: Record<string, (args: any) => ToolResult | Promise<T
       return { success: false, output: `搜索失败:${e.message}` }
     }
   },
-  edit_file: (args) => {
+  edit_file: async (args, ctx) => {
+    const access = await checkPathAccess(args.path, ctx.workspace)
+    if (!access.allowed) {
+      return { success: false, output: access.output || '路径访问被拒绝' }
+    }
     try {
       const content = readFileSync(args.path, 'utf-8')
       const lines = content.split('\n')
@@ -91,7 +115,11 @@ export const TOOL_HANDLERS: Record<string, (args: any) => ToolResult | Promise<T
       return { success: false, output: `编辑失败: ${e.message}` }
     }
   },
-  patch_file: (args) => {
+  patch_file: async (args, ctx) => {
+    const access = await checkPathAccess(args.path, ctx.workspace)
+    if (!access.allowed) {
+      return { success: false, output: access.output || '路径访问被拒绝' }
+    }
     try {
       const content = readFileSync(args.path, 'utf-8')
       let newContent = content
@@ -117,7 +145,11 @@ export const TOOL_HANDLERS: Record<string, (args: any) => ToolResult | Promise<T
       return { success: false, output: `批量替换失败: ${e.message}` }
     }
   },
-  modify_file: async (args) => {
+  modify_file: async (args, ctx) => {
+    const access = await checkPathAccess(args.path, ctx.workspace)
+    if (!access.allowed) {
+      return { success: false, output: access.output || '路径访问被拒绝' }
+    }
     try {
       let oldContent = ''
       try {

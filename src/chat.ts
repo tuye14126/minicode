@@ -1,5 +1,5 @@
-import * as readline from "node:readline"
-import * as process from "node:process"
+import * as readline from "node:readline/promises"
+import { stdin, stdout } from "node:process"
 import OpenAI from 'openai'
 import { runAgentTurn } from "./agent-loop.js"
 
@@ -24,23 +24,16 @@ const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
     ].join('\n'),
   },
 ]
-function question(rl: readline.Interface, query: string) {
-  return new Promise<string>(resolve => {
-    rl.question(query, input => {
-      resolve(input)
-    })
-  })
-}
 async function main() {
 
   while (true) {
     console.log(messages);
 
     const rl = readline.createInterface({
-      input: process.stdin,
-      output: process.stdout
+      input: stdin,
+      output: stdout
     })
-    const input = await question(rl, "用户: ")
+    const input = (await rl.question("用户: ")).trim()
     rl.close()
     if (input === "exit") {
       rl.close()

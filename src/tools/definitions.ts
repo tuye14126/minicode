@@ -79,13 +79,13 @@ export const TOOL_DEFINITIONS = [
       description: '在已有的文件中查找一段文本并替换。只替换第一处匹配。适合修改文件中的某一行或某段代码。',
       parameters: {
         type: 'object',
-        propertries: {
+        properties: {
           path: { type: 'string', description: '文件路径' },
           search: { type: 'string', description: '要查找的原文，需要精确匹配' },
           replace: { type: 'string', description: '替换成什么内容' },
-        }
+        },
+        required: ['path', 'search', 'replace'],
       },
-      required: ['path', 'search', 'replace'],
     }
   },
   {
@@ -95,21 +95,21 @@ export const TOOL_DEFINITIONS = [
       description: '在一个文件中同时应用多处查找替换。所有替换同时生效，互不干扰。适合一次性改多个地方。',
       parameters: {
         type: 'object',
-        propertries: {
+        properties: {
           path: { type: 'string', description: '文件路径' },
           replacements: {
             type: 'array',
             items: {
               type: 'object',
-              propertries: {
+              properties: {
                 search: { type: 'string', description: '需要被替换的文本原文' },
                 replace: { type: 'string', description: '替换为什么内容' }
               }
             }
-          }
-        }
+          },
+        },
+        required: ['path', 'replacements'],
       },
-      required: ['path', 'replacements'],
     }
   },
   {
