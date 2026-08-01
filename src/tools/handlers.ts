@@ -34,6 +34,15 @@ export const TOOL_HANDLERS: Record<string, ToolHandler> = {
       return { success: false, output: access.output || '路径访问被拒绝' }
     }
     try {
+      let oldContent = ''
+      try { oldContent = readFileSync(args.path, 'utf-8') } catch { /* 新文件 */ }
+      if (oldContent) {
+        const diff = buildUnifiedDiff(args.path, oldContent, args.content)
+        if (diff) {
+          const ok = await confirmDiff(args.path, diff)
+          if (!ok) return { success: false, output: '用户拒绝了写入' }
+        }
+      }
       writeFileSync(args.path, args.content, 'utf-8')
       return { success: true, output: `文件${args.path}写入成功` }
     } catch (e: any) {
@@ -51,15 +60,19 @@ export const TOOL_HANDLERS: Record<string, ToolHandler> = {
       const output = execSync(args.command, {
         encoding: 'utf-8',
         timeout: 30000,
-        cwd: process.cwd(),
-        shell: "bash.exe"
+        cwd: ctx.workspace,
+        shell: process.platform === 'win32' ? 'cmd.exe' : 'bash.exe'
       })
       return { success: true, output: output || "命令执行完毕, 无输出" }
     } catch (e: any) {
       return { success: false, output: `命令执行失败: ${e.message}\n${e.stdout || ''}\n${e.stderr || ''}` }
     }
   },
-  list_files: (args) => {
+  list_files: async (args, ctx) => {
+    const access = await checkPathAccess(args.path, ctx.workspace)
+    if (!access.allowed) {
+      return { success: false, output: access.output || '路径访问被拒绝' }
+    }
     try {
       const dir = args.path || "."
       const items = readdirSync(dir, { withFileTypes: true })
@@ -72,7 +85,11 @@ export const TOOL_HANDLERS: Record<string, ToolHandler> = {
       return { success: false, output: `列出目录失败: ${e.message}` }
     }
   },
-  grep_files: (args) => {
+  grep_files: async (args, ctx) => {
+    const access = await checkPathAccess(args.path, ctx.workspace)
+    if (!access.allowed) {
+      return { success: false, output: access.output || '路径访问被拒绝' }
+    }
     try {
       const pattern = args.pattern
       const searchPath = args.path || '.'
@@ -106,6 +123,10 @@ export const TOOL_HANDLERS: Record<string, ToolHandler> = {
       const newContent = lines.join('\n')
 
       const diff = buildUnifiedDiff(args.path, content, newContent)
+      if (diff) {
+        const ok = await confirmDiff(args.path, diff)
+        if (!ok) return { success: false, output: '用户拒绝了修改' }
+      }
       writeFileSync(args.path, newContent, 'utf-8')
       return {
         success: true,
@@ -135,6 +156,10 @@ export const TOOL_HANDLERS: Record<string, ToolHandler> = {
       }
 
       const diff = buildUnifiedDiff(args.path, content, newContent)
+      if (diff) {
+        const ok = await confirmDiff(args.path, diff)
+        if (!ok) return { success: false, output: '用户拒绝了修改' }
+      }
       writeFileSync(args.path, newContent, 'utf-8')
 
       return {

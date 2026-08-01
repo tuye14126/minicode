@@ -1,9 +1,5 @@
-import globals from "globals"
+import { readdirSync } from "node:fs"
 
-// const nodeGlobals = Object.fromEntries(
-//   Object.keys(globals.node).map(Key => [Key, "readonly"])
-// )
-console.log(nodeGlobals)
 
-console.log(process.platform);
-
+const arr = readdirSync(process.cwd())
+console.log(arr)

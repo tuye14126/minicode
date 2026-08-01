@@ -1,7 +1,7 @@
 import OpenAI from 'openai';
 import { TOOL_DEFINITIONS } from './tools/definitions.js'
 import { TOOL_HANDLERS } from './tools/handlers.js';
-type Message = OpenAI.Chat.Completions.ChatCompletionMessageParam
+export type Message = OpenAI.Chat.Completions.ChatCompletionMessageParam
 export async function runAgentTurn(
   client: OpenAI,
   messages: Message[],
