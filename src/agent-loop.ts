@@ -5,12 +5,13 @@ export type Message = OpenAI.Chat.Completions.ChatCompletionMessageParam
 export async function runAgentTurn(
   client: OpenAI,
   messages: Message[],
-  maxTurns: 15
+  maxTurns = 15,
+  model = 'deepseek-v4-flash'
 ): Promise<string> {
 
   for (let turn = 0; turn < maxTurns; turn++) {
     const completion = await client.chat.completions.create({
-      model: 'deepseek-v4-flash',
+      model: model,
       messages: messages,
       tool_choice: 'auto',
       tools: TOOL_DEFINITIONS

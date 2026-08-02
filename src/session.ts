@@ -67,8 +67,8 @@ export function listSessions(cwd: string) {
       const file = path.join(dir, name)
       const messageCount = readFileSync(file, 'utf-8').trim().split('\n')
         .filter(Boolean).length
-      return { id, messageCount, updateAt: statSync(file).mtimeMs }
+      return { id, messageCount, updatedAt: statSync(file).mtimeMs }
     })
-  sessions.sort((a, b) => b.updateAt - a.updateAt)
+  sessions.sort((a, b) => b.updatedAt - a.updatedAt)
   return sessions
 }
