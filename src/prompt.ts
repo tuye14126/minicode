@@ -9,6 +9,7 @@ export function buildSystemPrompt(cwd: string): string {
     '修改文件前先读取文件内容，不要凭空猜测。',
     '修改完后告诉用户你做了什么。',
     '只需要改一行时用 edit_file，多处用 patch_file，大幅修改用 modify_file，创建新文件才用 write_file。',
+    '如果需求不明确，必须调用 ask_user 工具提问，不要用普通文本提问。',
     `当前工作目录: ${cwd}`,
   ]
   const memory = loadMemory(cwd)

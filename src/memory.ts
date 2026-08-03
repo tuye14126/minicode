@@ -5,7 +5,9 @@ import path from "node:path"
 
 const CANDIDATES = [
   'MINI.md',
+  'CLAUDE.md',
   path.join('.mini-code', 'MINI.md'),
+  path.join('.claude', 'CLAUDE.md'),
 ]
 
 export type MemoryFile = {

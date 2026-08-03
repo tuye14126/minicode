@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import { TOOL_DEFINITIONS } from './tools/definitions.js'
 import { TOOL_HANDLERS } from './tools/handlers.js';
+import { replaceLargeToolResult } from './utils/tool-result-storage.js';
 export type Message = OpenAI.Chat.Completions.ChatCompletionMessageParam
 export async function runAgentTurn(
   client: OpenAI,
@@ -41,8 +42,8 @@ export async function runAgentTurn(
       const result = handler
         ? await handler(args, { workspace: process.cwd() })
         : { success: false, output: `未知工具${toolName}` }
-      console.log(toolName);
 
+      result.output = replaceLargeToolResult(result.output)
       messages.push(
         {
           role: 'tool',

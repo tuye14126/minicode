@@ -127,4 +127,46 @@ export const TOOL_DEFINITIONS = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'ask_user',
+      description: '当你需要澄清需求、确认方案或获取关键信息时，向用户提问。问题要具体、一次只问一个。',
+      parameters: {
+        type: 'object',
+        properties: {
+          question: { type: 'string', description: '要问用户的问题' },
+        },
+        required: ['question'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'web_fetch',
+      description: '抓取一个网页并返回纯文本内容。用于查阅文档、API 说明等。',
+      parameters: {
+        type: 'object',
+        properties: {
+          url: { type: 'string', description: '要抓取的完整 URL' },
+        },
+        required: ['url'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'web_search',
+      description: '搜索互联网，返回前 5 条结果的标题和链接。用于查找最新资料、API 用法等。',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: '搜索关键词' },
+        },
+        required: ['query'],
+      },
+    },
+  },
 ]

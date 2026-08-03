@@ -7,48 +7,20 @@ import { buildSystemPrompt } from "./prompt.js";
 import { TOOL_DEFINITIONS } from "./tools/definitions.js";
 import { renderMemoryReport } from "./memory.js";
 import { computeContextStats } from "./utils/token-estimator.js";
+import { compactConversation } from "./compact.js";
 const client = new OpenAI({
   apiKey: process.env['OPENAI_API_KEY'],
   baseURL: process.env['OPENAI_BASE_URL']
 });
 const MODEL = 'deepseek-v4-flash'
-// const argv = process.argv.slice(2)
 let sessionId = crypto.randomUUID().slice(0, 8)
 
-// const resumeIndex = argv.indexOf('--resume')
-// if (resumeIndex !== -1) {
-//   const target = argv[resumeIndex + 1]
-//   if (target && !target.startsWith('-')) {
-//     sessionId = target
-//   } else {
-//     const sessions = listSessions(process.cwd())
-//     if (sessions.length === 0) {
-//       console.log('没有可恢复的会话，开始新会话。')
-//     } else {
-//       console.log('\n可用会话:')
-//       sessions.forEach((s, i) => {
-//         console.log(`${i + 1}. ${s.id}  (${s.messageCount} 条消息, ${new Date(s.updateAt).toLocaleString()})`)
-//       })
-//       const rl = readline.createInterface({ input: stdin, output: stdout })
-//       const pick = (await rl.question('输入序号恢复: ')).trim()
-//       rl.close()
-//       const selected = sessions[Number(pick) - 1]
-//       if (selected) sessionId = selected.id
-//     }
-//   }
-// }
 let messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
   {
     "role": "system",
     "content": buildSystemPrompt(process.cwd()),
   },
 ]
-
-// const saved = loadSession(sessionId, process.cwd())
-// if (saved) {
-//   messages.push(...saved.filter(m => m.role !== 'system'))
-//   console.log(`\n已恢复会话 ${sessionId}\n`)
-// }
 
 const SLASHCOMMANDS = [
   { usage: '/help', description: '显示帮助' },
@@ -58,6 +30,7 @@ const SLASHCOMMANDS = [
   { usage: '/resume <id>', description: '恢复指定会话' },
   { usage: '/new', description: '开始新会话' },
   { usage: '/exit', description: '退出程序' },
+  { usage: '/compact', description: '手动压缩上下文' },
 ]
 
 function handleLocalCommand(input: string): string | null {
@@ -79,6 +52,7 @@ function handleLocalCommand(input: string): string | null {
       .map(s => `${s.id}  (${s.messageCount} 条消息)`)
       .join('\n')
   }
+
   return null
 }
 
@@ -119,6 +93,20 @@ async function main() {
         continue
       }
 
+      if (input === '/compact') {
+        const stats = computeContextStats(messages, MODEL)
+        console.log(`\n压缩前上下文: ${stats.totalTokens} tokens\n`)
+        const compacted = await compactConversation(client, messages, MODEL)
+        if (compacted) {
+          messages = compacted
+          const newStats = computeContextStats(messages, MODEL)
+          console.log(`已压缩: ${stats.totalTokens} → ${newStats.totalTokens} tokens\n`)
+        } else {
+          console.log('没有可压缩的内容。\n')
+        }
+        continue
+      }
+
       const localResult = handleLocalCommand(input)
       if (localResult !== null) {
         console.log(`\n${localResult}\n`)
@@ -128,6 +116,13 @@ async function main() {
       continue
     }
     messages.push({ "role": "user", "content": input })
+    // 压缩上下文
+    const stats = computeContextStats(messages, MODEL)
+    if (stats.utilization > 0.7) {
+      console.log(`\n上下文使用率 ${(stats.utilization * 100).toFixed(1)}%，自动压缩中...`)
+      const compacted = await compactConversation(client, messages, MODEL)
+      if (compacted) messages = compacted
+    }
     try {
       const startTime = Date.now()
       const reply = await runAgentTurn(client, messages, 15, MODEL)
