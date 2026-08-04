@@ -1,7 +1,7 @@
 import * as readline from "node:readline/promises"
 import { stdin, stdout } from "node:process"
 import OpenAI from 'openai'
-import { runAgentTurn } from "./agent-loop.js"
+import { Message, runAgentTurn } from "./agent-loop.js"
 import { listSessions, loadSession, saveSession } from "./session.js";
 import { buildSystemPrompt } from "./prompt.js";
 import { TOOL_DEFINITIONS } from "./tools/definitions.js";
@@ -15,7 +15,7 @@ const client = new OpenAI({
 const MODEL = 'deepseek-v4-flash'
 let sessionId = crypto.randomUUID().slice(0, 8)
 
-let messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+let messages: Message[] = [
   {
     "role": "system",
     "content": buildSystemPrompt(process.cwd()),
