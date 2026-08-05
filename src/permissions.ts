@@ -3,6 +3,7 @@ import { homedir } from 'node:os'
 import * as path from 'node:path'
 import * as readline from 'node:readline/promises'
 import { stdin, stdout } from 'node:process'
+import { askUserPrompt } from './user-prompt.js'
 
 const PERMISSIONS_PATH = path.join(homedir(), '.mini-code', 'permissions.json')
 type PermissionChoice = 'allow_once' | 'allow_always' | 'deny_once' | 'deny_always'
@@ -215,16 +216,11 @@ function saveStore(store: PermissionStore) {
   writeFileSync(PERMISSIONS_PATH, JSON.stringify(store, null, 2), 'utf-8')
 }
 async function askPermission(prompt: string): Promise<string> {
-  const rl = readline.createInterface({ input: stdin, output: stdout })
-  try {
-    const answer = (await rl.question(prompt)).trim().toLowerCase()
-    if (answer === 'a') return 'allow_always'
-    if (answer === 'n') return 'deny_once'
-    if (answer === 'd') return 'deny_always'
-    return 'allow_once' // 默认 y / 其他都算允许一次
-  } finally {
-    rl.close()
-  }
+  const answer = (await askUserPrompt(prompt)).trim().toLowerCase()
+  if (answer === 'a') return 'allow_always'
+  if (answer === 'n') return 'deny_once'
+  if (answer === 'd') return 'deny_always'
+  return 'allow_once'
 }
 
 
@@ -245,15 +241,15 @@ export async function checkCommandPermission(command: string): Promise<{
   if (devStore.deniedCommands.includes(command)) {
     return { allowed: false, output: `命令被永久拒绝: ${command}` }
   }
-  console.log('')
-  console.log('⚠️  危险命令检测:')
-  console.log(`  命令: ${command}`)
-  console.log(`  原因: ${reason}`)
-  console.log('')
 
-  const choice = await askPermission(
+
+  const choice = await askPermission([
+    '⚠️  危险命令检测',
+    `  命令: ${command}`,
+    `  原因: ${reason}`,
+    '',
     '如何处理？(y=允许一次 / a=总是允许 / n=拒绝一次 / d=总是拒绝): ',
-  )
+  ].join('\n'))
 
   if (choice === 'allow_once') {
     return { allowed: true }
@@ -296,15 +292,15 @@ export async function checkPathAccess(
   if (allowed) {
     return { allowed: true }
   }
-  console.log('')
-  console.log('⚠️  路径访问请求（工作目录外）')
-  console.log(`  目标: ${resolved}`)
-  console.log(`  工作目录: ${workspace}`)
-  console.log('')
 
-  const choice = await askPermission(
+
+  const choice = await askPermission([
+    '⚠️  路径访问请求（工作目录外）',
+    `  目标: ${resolved}`,
+    `  工作目录: ${workspace}`,
+    '',
     '如何处理？(y=允许一次 / a=总是允许该目录 / n=拒绝): ',
-  )
+  ].join('\n'))
 
   if (choice === 'allow_once') {
     return { allowed: true }

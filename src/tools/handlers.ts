@@ -5,6 +5,7 @@ import { checkCommandPermission, checkPathAccess } from "../permissions.js"
 import * as readline from 'node:readline/promises'
 import { stdin, stdout } from "node:process"
 import { parseHTML } from "linkedom";
+import { askUserPrompt } from "../user-prompt.js"
 
 type ToolResult = {
   success: boolean
@@ -194,17 +195,8 @@ export const TOOL_HANDLERS: Record<string, ToolHandler> = {
     }
   },
   ask_user: async (args) => {
-    const rl = readline.createInterface({ input: stdin, output: stdout })
-    try {
-      console.log('')
-      console.log('──────────────────────────────────────────')
-      console.log(`❓ AI 提问: ${args.question}`)
-      console.log('──────────────────────────────────────────')
-      const answer = (await rl.question('你的回答: ')).trim()
-      return { success: true, output: `用户回答: ${answer}` }
-    } finally {
-      rl.close()
-    }
+    const answer = (await askUserPrompt(`AI 提问: ${args.question}\n你的回答: `)).trim()
+    return { success: true, output: `用户回答: ${answer}` }
   },
   web_fetch: async (args) => {
     try {

@@ -1,6 +1,7 @@
 import { createTwoFilesPatch } from "diff"
 import { stdin, stdout } from "node:process"
 import * as readline from 'node:readline/promises'
+import { askUserPrompt } from "./user-prompt.js"
 
 export function buildUnifiedDiff(
   filePath: string,
@@ -32,18 +33,14 @@ export async function confirmDiff(
   filePath: string,
   diff: string
 ): Promise<boolean> {
-  console.log('')
-  console.log('─'.repeat(50))
-  console.log(`📝 修改预览: ${filePath}`)
-  console.log('─'.repeat(50))
-  console.log(diff)
-  console.log('─'.repeat(50))
-
-  const rl = readline.createInterface({ input: stdin, output: stdout })
-  try {
-    const answer = (await rl.question("是否应用以上更改？(y/n): ")).trim().toLowerCase()
-    return answer === 'y' || answer === 'yes'
-  } finally {
-    rl.close()
-  }
+  const promptText = [
+    '─'.repeat(50),
+    `📝 修改预览: ${filePath}`,
+    '─'.repeat(50),
+    diff,
+    '─'.repeat(50),
+    '是否应用以上更改？(y/n): ',
+  ].join('\n')
+  const answer = (await askUserPrompt(promptText)).toLowerCase()
+  return answer === 'y' || answer === 'yes'
 }
