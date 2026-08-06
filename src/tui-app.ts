@@ -159,8 +159,6 @@ async function main(): Promise<void> {
         input = history[historyIndex]
       }
       cursor = input.length
-    } else if (event.type === 'arrow' && event.direction === 'left' && cursor > 0) {
-      cursor -= 1
     } else if (event.type === 'arrow' && event.direction === 'right' && cursor < input.length) {
       cursor += 1
     } else if (event.type === 'enter') {

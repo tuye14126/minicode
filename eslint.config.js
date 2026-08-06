@@ -8,7 +8,7 @@ const nodeGlobals = Object.fromEntries(
 
 export default [
   {
-    ignore: [
+    ignores: [
       'dist/**',
       'node_modules/**',
       'coverage/**',

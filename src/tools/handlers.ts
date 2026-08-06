@@ -2,8 +2,6 @@ import { execSync } from "node:child_process"
 import { readdirSync, readFileSync, writeFileSync } from "node:fs"
 import { buildUnifiedDiff, confirmDiff } from "../file-review.js"
 import { checkCommandPermission, checkPathAccess } from "../permissions.js"
-import * as readline from 'node:readline/promises'
-import { stdin, stdout } from "node:process"
 import { parseHTML } from "linkedom";
 import { askUserPrompt } from "../user-prompt.js"
 

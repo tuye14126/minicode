@@ -3,8 +3,13 @@
   "version": "1.0.0",
   "description": "",
   "scripts": {
-    "dev": "tsx --env-file=.env src/chat.ts",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "tsx src/index.ts",
+    "test": "node test/run-tests.mjs",
+    "check": "tsc --noEmit",
+    "lint": "eslint src test"
+  },
+  "bin": {
+    "minicode": "./bin/minicode"
   },
   "keywords": [],
   "author": "",

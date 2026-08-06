@@ -30,6 +30,7 @@ export async function runAgentTurn(
     messages.push(replyMessage)
 
     for (const toolCall of toolCalls) {
+      if (toolCall.type !== 'function') continue
       const toolName = toolCall.function.name
       let args: any
       try {

@@ -1,6 +1,4 @@
 import { createTwoFilesPatch } from "diff"
-import { stdin, stdout } from "node:process"
-import * as readline from 'node:readline/promises'
 import { askUserPrompt } from "./user-prompt.js"
 
 export function buildUnifiedDiff(

@@ -1,12 +1,9 @@
 import { existsSync, readFileSync, mkdirSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import * as path from 'node:path'
-import * as readline from 'node:readline/promises'
-import { stdin, stdout } from 'node:process'
 import { askUserPrompt } from './user-prompt.js'
 
 const PERMISSIONS_PATH = path.join(homedir(), '.mini-code', 'permissions.json')
-type PermissionChoice = 'allow_once' | 'allow_always' | 'deny_once' | 'deny_always'
 type PermissionStore = {
   allowedCommands: string[],
   deniedCommands: string[],
