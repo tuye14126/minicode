@@ -5,7 +5,7 @@ import path from "node:path"
 export type MiniCodeSettings = {
   model?: string
   env?: Record<string, string>
-  maxOutPutTokens?: number
+  maxOutputTokens?: number
 }
 
 export type RuntimeConfig = {
@@ -15,15 +15,18 @@ export type RuntimeConfig = {
   sourceSummary: string
 }
 
-export const MINI_CODE_DIR = process.env.MINI_CODE_HOME
-  ? path.resolve(process.env.MINI_CODE_HOME)
-  : path.join(homedir(), '.mini-code')
-
-export const MINI_CODE_SETTINGS_PATH = path.join(MINI_CODE_DIR, "settings.json")
+export function getMiniCodeDir(): string {
+  return process.env.MINI_CODE_HOME
+    ? path.resolve(process.env.MINI_CODE_HOME)
+    : path.join(homedir(), '.mini-code')
+}
+export function getMiniCodeSettingsPath(): string {
+  return path.join(getMiniCodeDir(), "settings.json")
+}
 
 export function readMiniCodeSettings(): MiniCodeSettings {
   try {
-    const content = readFileSync(MINI_CODE_SETTINGS_PATH, 'utf-8')
+    const content = readFileSync(getMiniCodeSettingsPath(), 'utf-8')
     const jsonParse = JSON.parse(content)
     if (jsonParse && typeof jsonParse === 'object') {
       return jsonParse as MiniCodeSettings
@@ -42,15 +45,17 @@ export function saveMiniCodeSettings(updates: MiniCodeSettings) {
       ...(updates.env ?? {})
     }
   }
-  mkdirSync(MINI_CODE_DIR, { recursive: true })
-  writeFileSync(MINI_CODE_SETTINGS_PATH, JSON.stringify(after, null, 2) + '\n', 'utf-8')
+  mkdirSync(getMiniCodeDir(), { recursive: true })
+  writeFileSync(getMiniCodeSettingsPath(), JSON.stringify(after, null, 2) + '\n', 'utf-8')
 }
 
-export function loadRuntimeConfig(): RuntimeConfig {
+export function loadRuntimeConfig(
+  env: NodeJS.ProcessEnv = process.env
+): RuntimeConfig {
   const settings = readMiniCodeSettings()
   const mergeEnv = {
     ...(settings.env ?? {}),
-    ...process.env
+    ...env
   }
   const model =
     mergeEnv.MINI_CODE_MODEL?.trim() ||

@@ -8,7 +8,6 @@ import { TOOL_DEFINITIONS } from "./tools/definitions.js";
 import { renderMemoryReport } from "./memory.js";
 import { computeContextStats } from "./utils/token-estimator.js";
 import { compactConversation } from "./compact.js";
-import { ChatCompletionFunctionTool } from "openai/resources";
 import { loadRuntimeConfig } from "./config.js";
 
 const SLASHCOMMANDS = [

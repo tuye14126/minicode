@@ -2,6 +2,8 @@ import { existsSync, readFileSync, mkdirSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import * as path from 'node:path'
 import { askUserPrompt } from './user-prompt.js'
+import { ToolPermissions } from './tools.js'
+import { confirmDiff } from './file-review.js'
 
 const PERMISSIONS_PATH = path.join(homedir(), '.mini-code', 'permissions.json')
 type PermissionStore = {
@@ -309,4 +311,23 @@ export async function checkPathAccess(
   }
 
   return { allowed: false, output: `路径访问被拒绝: ${resolved}` }
+}
+
+
+export function createWorkspacePermissions(cwd: string): ToolPermissions {
+  return {
+    async ensurePathAccess(target, intent) {
+      const r = await checkPathAccess(target, cwd)
+      if (!r.allowed) throw new Error(r.output ?? '路径访问被拒绝')
+    },
+    async ensureCommand(command, args) {
+      const r = await checkCommandPermission([command, ...args].join(' '))
+      if (!r.allowed) throw new Error(r.output ?? '命令被拒绝')
+    },
+    async ensureEdit(target, diff) {
+      const ok = await confirmDiff(target, diff)
+      if (!ok) throw new Error('用户拒绝了修改')
+    },
+  }
+
 }
