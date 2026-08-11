@@ -1,21 +1,31 @@
 import OpenAI from 'openai';
-import { TOOL_DEFINITIONS } from './tools/definitions.js'
-import { TOOL_HANDLERS } from './tools/handlers.js';
 import { replaceLargeToolResult } from './utils/tool-result-storage.js';
+import { ToolRegistry } from './tools.js';
+import { createWorkspacePermissions } from './permissions.js';
 export type Message = OpenAI.Chat.Completions.ChatCompletionMessageParam
 export async function runAgentTurn(
   client: OpenAI,
   messages: Message[],
   maxTurns = 15,
-  model = 'deepseek-v4-flash'
+  model = 'deepseek-v4-flash',
+  registry: ToolRegistry
 ): Promise<string> {
-
+  const toolStore = registry.list()
   for (let turn = 0; turn < maxTurns; turn++) {
     const completion = await client.chat.completions.create({
       model: model,
       messages: messages,
       tool_choice: 'auto',
-      tools: TOOL_DEFINITIONS
+      tools: toolStore.map(tool => {
+        return {
+          type: 'function',
+          function: {
+            name: tool.name,
+            description: tool.description,
+            parameters: tool.inputSchema
+          }
+        }
+      })
     });
     const replyMessage = completion.choices[0].message
     const toolCalls = replyMessage.tool_calls
@@ -38,12 +48,7 @@ export async function runAgentTurn(
       } catch {
         args = {}
       }
-
-      const handler = TOOL_HANDLERS[toolName]
-      const result = handler
-        ? await handler(args, { workspace: process.cwd() })
-        : { success: false, output: `未知工具${toolName}` }
-
+      const result = await registry.execute(toolName, args, { cwd: process.cwd(), permissions: createWorkspacePermissions(process.cwd()) })
       result.output = replaceLargeToolResult(result.output)
       messages.push(
         {

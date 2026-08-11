@@ -76,16 +76,42 @@ export const webSearchTool: ToolDefinition<Input> = {
       const { document } = parseHTML(html);
       const results: string[] = [];
 
+      // 过滤域名的辅助函数
+      const extractDomain = (url: string): string => {
+        try {
+          return new URL(url).hostname.replace(/^www\./, '');
+        } catch {
+          return '';
+        }
+      };
+
+      const isDomainAllowed = (hostname: string): boolean => {
+        if (input.allowed_domains?.length) {
+          return input.allowed_domains.some(
+            d => hostname === d || hostname.endsWith('.' + d)
+          );
+        }
+        if (input.blocked_domains?.length) {
+          return !input.blocked_domains.some(
+            d => hostname === d || hostname.endsWith('.' + d)
+          );
+        }
+        return true;
+      };
+
       // 选取搜索结果条目
       const items = document.querySelectorAll('li.b_algo');
       for (const item of items) {
-        if (results.length >= 5) break;
+        if (results.length >= (input.max_results ?? 5)) break;
         const aTag = item.querySelector('h2 a');
         if (!aTag) continue;
 
         const link = aTag.getAttribute('href') || '';
         const title = aTag.textContent.trim();
         if (!link || !title) continue;
+
+        const hostname = extractDomain(link);
+        if (hostname && !isDomainAllowed(hostname)) continue;
 
         results.push(`${results.length + 1}. ${title}\n   ${link}`);
       }

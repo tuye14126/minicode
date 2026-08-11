@@ -227,7 +227,7 @@ minicode --fork <session-id>
 
 优先级从高到低。每一轮只实现一项，完成并验收后再进入下一项。
 
-### T1（P0）工程基线：入口、脚本、类型、配置目录
+### [完成] T1（P0）工程基线：入口、脚本、类型、配置目录
 
 范围：
 
@@ -245,7 +245,7 @@ npm run dev                                      # 能启动并进入对话
 
 对比原版：`/status` 应显示 `model/baseUrl/auth/mcp servers/source`；无模型或无鉴权时应给出明确错误。
 
-### T2（P0）工具框架：ToolRegistry + zod 校验 + 12 个内置工具
+### [完成] T2（P0）工具框架：ToolRegistry + zod 校验 + 12 个内置工具
 
 范围：
 
@@ -255,7 +255,7 @@ npm run dev                                      # 能启动并进入对话
 - `load_skill` 可在 T7 完成 Skills 后补上，先保留 11 个工具。
 
 验收标准：`npm test` 有工具级测试；未知工具、非法入参、越界路径分别返回 `ok:false` 与可读原因。
-
+> 验证结果：`npm run check` 0 error；`npm test` 通过（21 个工具级测试：未知工具/非法入参/越界路径返回 ok:false；read_file 分块、edit_file replaceAll、patch_file 原子性、run_command args/cwd 等）；旧 definitions.ts/handlers.ts 已删除。
 ### T3（P0）权限系统：PermissionManager
 
 范围：

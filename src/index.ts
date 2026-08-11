@@ -4,11 +4,20 @@ import OpenAI from 'openai'
 import { Message, runAgentTurn } from "./agent-loop.js"
 import { listSessions, loadSession, saveSession } from "./session.js";
 import { buildSystemPrompt } from "./prompt.js";
-import { TOOL_DEFINITIONS } from "./tools/definitions.js";
 import { renderMemoryReport } from "./memory.js";
 import { computeContextStats } from "./utils/token-estimator.js";
 import { compactConversation } from "./compact.js";
 import { loadRuntimeConfig } from "./config.js";
+import { createDefaultToolRegistry } from "./tools/index.js";
+
+
+const runtime = loadRuntimeConfig()
+
+
+const registry = await createDefaultToolRegistry({
+  cwd: process.cwd(),
+  runtime
+})
 
 const SLASHCOMMANDS = [
   { usage: '/help', description: '显示帮助' },
@@ -27,9 +36,9 @@ function handleLocalCommand(input: string): string | null {
   }
   if (input === '/tools') {
 
-    return TOOL_DEFINITIONS
+    return registry.list()
       .map(t => {
-        return `- ${t.function.name}: ${t.function.description}`
+        return `- ${t.name}: ${t.description}`
       })
       .join('\n')
   }
@@ -48,7 +57,6 @@ function handleLocalCommand(input: string): string | null {
 }
 
 async function main() {
-  const runtime = loadRuntimeConfig()
   const client = new OpenAI({
     apiKey: runtime.apiKey,
     baseURL: runtime.baseUrl
@@ -130,7 +138,7 @@ async function main() {
     }
     try {
       const startTime = Date.now()
-      const reply = await runAgentTurn(client, messages, 15, MODEL)
+      const reply = await runAgentTurn(client, messages, 15, MODEL, registry)
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1)
       const contextStats = computeContextStats(messages, MODEL)
       const pct = (contextStats.utilization * 100).toFixed(1)

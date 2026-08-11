@@ -5,6 +5,8 @@ import { buildSystemPrompt } from "./prompt.js"
 import { Message, runAgentTurn } from "./agent-loop.js"
 import { computeContextStats } from "./utils/token-estimator.js"
 import { setUserPromptFn } from "./user-prompt.js"
+import { createDefaultToolRegistry } from "./tools/index.js"
+import { loadRuntimeConfig } from "./config.js"
 
 
 const screen = new Screen()
@@ -111,7 +113,8 @@ async function main(): Promise<void> {
     "content": buildSystemPrompt(process.cwd()),
   })
   draw(input, cursor)
-
+  const runtime = loadRuntimeConfig()
+  const registry = await createDefaultToolRegistry({ cwd: process.cwd(), runtime })
   process.stdin.on('data', async (chunk: Buffer) => {
     const event = parseKeyEvent(chunk)
 
@@ -176,7 +179,7 @@ async function main(): Promise<void> {
 
         try {
           const startTime = Date.now()
-          const reply = await runAgentTurn(client, messages, 15, MODEL)
+          const reply = await runAgentTurn(client, messages, 15, MODEL, registry)
           lastElapsed = Number(((Date.now() - startTime) / 1000).toFixed(1))
           showMessages.push({ kind: 'ai', text: reply })
         } catch (e: any) {

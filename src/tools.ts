@@ -32,7 +32,7 @@ export type ToolDefinition<TInput> = {
 export class ToolRegistry {
   private readonly toolsStore: ToolDefinition<unknown>[]
   constructor(
-    tools: ToolDefinition<unknown>[]
+    tools: ToolDefinition<any>[]
   ) {
     this.toolsStore = tools
   }
