@@ -1,333 +1,478 @@
-import { existsSync, readFileSync, mkdirSync, writeFileSync } from 'node:fs'
-import { homedir } from 'node:os'
-import * as path from 'node:path'
-import { askUserPrompt } from './user-prompt.js'
-import { ToolPermissions } from './tools.js'
-import { confirmDiff } from './file-review.js'
+import { mkdir, readFile, writeFile } from "node:fs/promises"
+import { getMiniCodeDir } from "./config.js"
+import { isEnoentError } from "./utils/errors.js"
+import path from "node:path"
 
-const PERMISSIONS_PATH = path.join(homedir(), '.mini-code', 'permissions.json')
-type PermissionStore = {
-  allowedCommands: string[],
-  deniedCommands: string[],
-  allowedDirectories: string[]
-}
-const INTERPRETERS = new Set([
-  'node', 'node.exe',
-  'python', 'python.exe', 'python3', 'python3.exe', 'py',
-  'bash', 'sh', 'zsh', 'fish',
-  'powershell', 'pwsh', 'pwsh.exe',
-  'cmd', 'cmd.exe',
-  'perl', 'ruby', 'php', 'bun',
-])
-/**
- * 把命令按 shell 运算符拆成多个命令段。
- * 引号和转义内的 | ; & 不会被拆分。
- */
-function splitShellSegments(command: string): string[] {
-  const segments: string[] = []
-  let current = ''
-  let quote: string | null = null
-  let escaped = false
-  let i = 0
 
-  while (i < command.length) {
-    const char = command[i]
-
-    if (escaped) {
-      current += char
-      escaped = false
-      i++
-      continue
-    }
-
-    if (char === '\\') {
-      escaped = true
-      current += char
-      i++
-      continue
-    }
-
-    if (quote) {
-      current += char
-      if (char === quote) quote = null
-      i++
-      continue
-    }
-
-    if (char === '"' || char === "'" || char === '`') {
-      quote = char
-      current += char
-      i++
-      continue
-    }
-
-    // 引号外的 shell 分隔符
-    if (char === ';' || char === '\n' || char === '|' || char === '&' || char === '(' || char === ')') {
-      if (current.trim()) segments.push(current.trim())
-      current = ''
-      i++
-      // 跳过连续的 | & （如 && 和 ||）
-      while (i < command.length && (command[i] === '|' || command[i] === '&')) i++
-      continue
-    }
-
-    current += char
-    i++
-  }
-
-  if (current.trim()) segments.push(current.trim())
-  return segments
+export type PermissionStore = {
+  allowedDirectoryPrefixes?: string[]
+  deniedDirectoryPrefixes?: string[]
+  allowedCommandPatterns?: string[]
+  deniedCommandPatterns?: string[]
+  allowedEditPatterns?: string[]
+  deniedEditPatterns?: string[]
 }
 
-/**
- * 把命令段解析成命令名 + 参数列表，同时去掉引号。
- */
-function parseCommandSegment(segment: string): { name: string; args: string[] } {
-  const tokens: string[] = []
-  let current = ''
-  let quote: string | null = null
-  let escaped = false
+export type PermissionDecision =
+  | 'allow_once'
+  | 'allow_always'
+  | 'allow_turn'
+  | 'allow_all_turn'
+  | 'deny_once'
+  | 'deny_always'
+  | 'deny_with_feedback'
 
-  for (const char of segment) {
-    if (escaped) {
-      current += char
-      escaped = false
-      continue
-    }
-    if (char === '\\') {
-      escaped = true
-      continue
-    }
-    if (quote) {
-      if (char === quote) quote = null
-      else current += char
-      continue
-    }
-    if (char === '"' || char === "'") {
-      quote = char
-      continue
-    }
-    if (/\s/.test(char)) {
-      if (current) {
-        tokens.push(current)
-        current = ''
-      }
-      continue
-    }
-    current += char
-  }
-  if (current) tokens.push(current)
-
-  return { name: tokens[0] ?? '', args: tokens.slice(1) }
+export type PermissionChoice = {
+  key: string
+  label: string
+  decision: PermissionDecision
+}
+export type PermissionPromptResult = {
+  decision: PermissionDecision
+  feedback?: string
+}
+export type PermissionRequest = {
+  kind: 'path' | 'command' | 'edit'
+  summary: string
+  details: string[]
+  scope: string
+  choices: PermissionChoice[]
 }
 
-/**
- * 检查单个命令段，返回危险原因；安全返回 null。
- */
-function checkSegment(segment: string): string | null {
-  // 命令替换 / 子 shell：$(...) 或反引号，可执行任意代码
-  if (/[$][(]/.test(segment) || /`/.test(segment)) {
-    return '命令中包含命令替换 $(...) 或反引号，可执行任意代码'
-  }
+export type PermissionPromptHandler = (request: PermissionRequest) => Promise<PermissionPromptResult>
 
-  const { name, args } = parseCommandSegment(segment)
-  const commandName = name.toLowerCase().split(/[\\/]/).pop() ?? ''
+export type PathIntent = 'read' | 'write' | 'list' | 'search' | 'command_cwd'
 
-  // 解释器：node/python/bash 等，参数无法静态判断是否安全
-  if (INTERPRETERS.has(commandName)) {
-    return `${name} 是解释器，可以执行任意代码`
-  }
 
-  // 提权
-  if (commandName === 'sudo' || commandName === 'doas') {
-    return 'sudo/doas 会以更高权限执行命令'
-  }
-
-  // git 危险操作
-  if (commandName === 'git') {
-    if (args.includes('reset') && args.includes('--hard')) {
-      return 'git reset --hard 会丢弃本地未提交的修改'
-    }
-    if (args.includes('clean')) {
-      return 'git clean 会删除未跟踪的文件'
-    }
-    if (args.includes('push') && (args.includes('--force') || args.includes('-f'))) {
-      return 'git push --force 会重写远程历史'
-    }
-    if (args.includes('checkout') && args.includes('--')) {
-      return 'git checkout -- 会覆盖工作区文件'
-    }
-    if (args.includes('restore') && args.some(a => a.startsWith('--source'))) {
-      return 'git restore --source 会覆盖本地文件'
-    }
-  }
-
-  // 删除
-  if (commandName === 'rm') {
-    const flags = args.filter(a => a.startsWith('-')).join('')
-    if (flags.includes('r') || flags.includes('f') || args.length === 1) {
-      return 'rm 会永久删除文件'
-    }
-  }
-  if (commandName === 'del' || commandName === 'rd' || commandName === 'rmdir') {
-    if (args.some(a => /^\/[sq]/i.test(a) || /^-[sq]/i.test(a))) {
-      return `${name} 会递归/静默删除文件`
-    }
-  }
-
-  // 发布
-  if (commandName === 'npm' && args.includes('publish')) {
-    return 'npm publish 会把包发布到公共仓库'
-  }
-
-  return null
-}
-// 路径检查
-export function isInsideWorkspace(targetPath: string, workspace: string): boolean {
-  const relative = path.relative(workspace, path.resolve(targetPath))
-  return (
-    relative === '' ||
-    (!relative.startsWith('..') && !path.isAbsolute(relative))
-  )
-}
-export function classifyDangerousCommand(command: string): string | null {
-  const segments = splitShellSegments(command)
-  for (const segment of segments) {
-    const reason = checkSegment(segment)
-    if (reason) {
-      return `${reason}\n  危险命令段: ${segment}`
-    }
-  }
-  return null
+async function writePermissionStore(store: PermissionStore): Promise<void> {
+  await mkdir(getMiniCodeDir(), { recursive: true })
+  await writeFile(getPermissionsPath(), `${JSON.stringify(store, null, 2)}\n`, 'utf-8')
 }
 
 
-function loadStore(): PermissionStore {
+
+async function readPermissionStore(): Promise<PermissionStore> {
   try {
-    if (existsSync(PERMISSIONS_PATH)) {
-      return JSON.parse(readFileSync(PERMISSIONS_PATH, 'utf-8'))
+    const content = await readFile(getPermissionsPath(), 'utf-8')
+    return JSON.parse(content) as PermissionStore
+  } catch (error) {
+    if (isEnoentError(error)) {
+      return {}
     }
-  } catch { }
-  return { allowedCommands: [], deniedCommands: [], allowedDirectories: [] }
-}
-function saveStore(store: PermissionStore) {
-  mkdirSync(path.dirname(PERMISSIONS_PATH), { recursive: true })
-  writeFileSync(PERMISSIONS_PATH, JSON.stringify(store, null, 2), 'utf-8')
-}
-async function askPermission(prompt: string): Promise<string> {
-  const answer = (await askUserPrompt(prompt)).trim().toLowerCase()
-  if (answer === 'a') return 'allow_always'
-  if (answer === 'n') return 'deny_once'
-  if (answer === 'd') return 'deny_always'
-  return 'allow_once'
+
+    throw error
+  }
 }
 
 
-
-export async function checkCommandPermission(command: string): Promise<{
-  allowed: boolean
-  output?: string
-}> {
-  const reason = classifyDangerousCommand(command)
-  if (!reason) {
-    return { allowed: true }
-  }
-
-  const devStore = loadStore()
-  if (devStore.allowedCommands.includes(command)) {
-    return { allowed: true }
-  }
-  if (devStore.deniedCommands.includes(command)) {
-    return { allowed: false, output: `命令被永久拒绝: ${command}` }
-  }
-
-
-  const choice = await askPermission([
-    '⚠️  危险命令检测',
-    `  命令: ${command}`,
-    `  原因: ${reason}`,
-    '',
-    '如何处理？(y=允许一次 / a=总是允许 / n=拒绝一次 / d=总是拒绝): ',
-  ].join('\n'))
-
-  if (choice === 'allow_once') {
-    return { allowed: true }
-  }
-  if (choice === 'allow_always') {
-    devStore.allowedCommands.push(command)
-    saveStore(devStore)
-    return { allowed: true }
-  }
-  if (choice === 'deny_always') {
-    devStore.deniedCommands.push(command)
-    saveStore(devStore)
-    return { allowed: false, output: `命令已被永久拒绝: ${command}` }
-  }
-
-  return { allowed: false, output: '用户拒绝了命令执行' }
+type EnsureCommandOptions = {
+  forcePromptReason?: string
 }
 
-/*
- * 路径权限检查：
- * 1. 在工作目录内 → 放行
- * 2. 在工作目录外 → 查持久化允许目录 → 没有则问用户
- */
+function normalizePath(targetPath: string): string {
+  return path.resolve(targetPath)
+}
 
-export async function checkPathAccess(
-  targetPath: string,
-  workspace: string
-): Promise<{
-  allowed: boolean
-  output?: string
-}> {
-  const resolved = path.resolve(targetPath)
-  if (isInsideWorkspace(resolved, workspace)) {
-    return { allowed: true }
-  }
-  const store = loadStore()
-  const allowed = store.allowedDirectories.some(dir =>
-    isInsideWorkspace(resolved, dir),
+function isWithinDirectory(root: string, target: string): boolean {
+  const relative = path.relative(root, target)
+  return (
+    relative === "" || (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative))
   )
-  if (allowed) {
-    return { allowed: true }
+}
+
+function matchesDirectoryPrefix(
+  targetPath: string,
+  directories: Iterable<string>
+): boolean {
+  for (const directory of directories) {
+    if (isWithinDirectory(directory, targetPath)) {
+      return true
+    }
   }
 
-
-  const choice = await askPermission([
-    '⚠️  路径访问请求（工作目录外）',
-    `  目标: ${resolved}`,
-    `  工作目录: ${workspace}`,
-    '',
-    '如何处理？(y=允许一次 / a=总是允许该目录 / n=拒绝): ',
-  ].join('\n'))
-
-  if (choice === 'allow_once') {
-    return { allowed: true }
-  }
-  if (choice === 'allow_always') {
-    store.allowedDirectories.push(path.dirname(resolved))
-    saveStore(store)
-    return { allowed: true }
-  }
-
-  return { allowed: false, output: `路径访问被拒绝: ${resolved}` }
+  return false
 }
 
 
-export function createWorkspacePermissions(cwd: string): ToolPermissions {
-  return {
-    async ensurePathAccess(target, intent) {
-      const r = await checkPathAccess(target, cwd)
-      if (!r.allowed) throw new Error(r.output ?? '路径访问被拒绝')
-    },
-    async ensureCommand(command, args) {
-      const r = await checkCommandPermission([command, ...args].join(' '))
-      if (!r.allowed) throw new Error(r.output ?? '命令被拒绝')
-    },
-    async ensureEdit(target, diff) {
-      const ok = await confirmDiff(target, diff)
-      if (!ok) throw new Error('用户拒绝了修改')
-    },
+function formatCommandSignature(command: string, args: string[]): string {
+  return [command, ...args].join(' ').trim()
+}
+
+function classifyDangerousCommand(command: string, args: string[]): string | null {
+  const normalizedArgs = args.map(arg => arg.trim()).filter(Boolean)
+  const signature = formatCommandSignature(command, normalizedArgs)
+
+  if (command === 'git') {
+    if (normalizedArgs.includes('reset') && normalizedArgs.includes('--hard')) {
+      return `git reset --hard can discard local changes (${signature})`
+    }
+
+    if (normalizedArgs.includes('clean')) {
+      return `git clean can delete untracked files (${signature})`
+    }
+
+    if (
+      normalizedArgs.includes('checkout') &&
+      normalizedArgs.includes('--')
+    ) {
+      return `git checkout -- can overwrite working tree files (${signature})`
+    }
+
+    if (
+      normalizedArgs.includes('restore') &&
+      normalizedArgs.some(arg => arg.startsWith('--source'))
+    ) {
+      return `git restore --source can overwrite local files (${signature})`
+    }
+
+    if (
+      normalizedArgs.includes('push') &&
+      normalizedArgs.some(arg => arg === '--force' || arg === '-f')
+    ) {
+      return `git push --force rewrites remote history (${signature})`
+    }
   }
 
+  if (command === 'npm' && normalizedArgs.includes('publish')) {
+    return `npm publish affects a registry outside this machine (${signature})`
+  }
+
+  if (
+    command === 'node' ||
+    command === 'python3' ||
+    command === 'bun' ||
+    command === 'bash' ||
+    command === 'sh'
+  ) {
+    return `${command} can execute arbitrary local code (${signature})`
+  }
+
+  return null
+}
+
+export class PermissionManager {
+  private readonly allowedDirectoryPrefixes = new Set<string>()
+  private readonly deniedDirectoryPrefixes = new Set<string>()
+  private readonly sessionAllowedPaths = new Set<string>()
+  private readonly sessionDeniedPaths = new Set<string>()
+  private readonly allowedCommandPatterns = new Set<string>()
+  private readonly deniedCommandPatterns = new Set<string>()
+  private readonly sessionAllowedCommands = new Set<string>()
+  private readonly sessionDeniedCommands = new Set<string>()
+  private readonly allowedEditPatterns = new Set<string>()
+  private readonly deniedEditPatterns = new Set<string>()
+  private readonly sessionAllowedEdits = new Set<string>()
+  private readonly sessionDeniedEdits = new Set<string>()
+  private readonly turnAllowedEdits = new Set<string>()
+  private turnAllowAllEdits = false
+  private ready: Promise<void>
+
+  constructor(
+    private readonly workspaceRoot: string,
+    private readonly prompt?: PermissionPromptHandler
+  ) {
+    this.ready = this.initialize()
+  }
+
+  private async initialize(): Promise<void> {
+    const store = await readPermissionStore()
+    for (const directory of store.allowedDirectoryPrefixes ?? []) {
+      this.allowedDirectoryPrefixes.add(normalizePath(directory))
+    }
+
+    for (const directory of store.deniedDirectoryPrefixes ?? []) {
+      this.deniedDirectoryPrefixes.add(normalizePath(directory))
+    }
+
+    for (const pattern of store.allowedCommandPatterns ?? []) {
+      this.allowedCommandPatterns.add(pattern)
+    }
+
+    for (const pattern of store.deniedCommandPatterns ?? []) {
+      this.deniedCommandPatterns.add(pattern)
+    }
+
+    for (const pattern of store.allowedEditPatterns ?? []) {
+      this.allowedEditPatterns.add(normalizePath(pattern))
+    }
+
+    for (const pattern of store.deniedEditPatterns ?? []) {
+      this.deniedEditPatterns.add(normalizePath(pattern))
+    }
+  }
+  private async persist(): Promise<void> {
+    await writePermissionStore({
+      allowedDirectoryPrefixes: [...this.allowedDirectoryPrefixes],
+      deniedDirectoryPrefixes: [...this.deniedDirectoryPrefixes],
+      allowedCommandPatterns: [...this.allowedCommandPatterns],
+      deniedCommandPatterns: [...this.deniedCommandPatterns],
+      allowedEditPatterns: [...this.allowedEditPatterns],
+      deniedEditPatterns: [...this.deniedEditPatterns],
+    })
+  }
+  resetTurn(): void {
+    this.turnAllowedEdits.clear()
+    this.turnAllowAllEdits = false
+  }
+
+  getSummary(): string[] {
+    const summary = [`cwd: ${this.workspaceRoot}`]
+    if (this.allowedDirectoryPrefixes.size > 0) {
+      summary.push(
+        `extra allowed dirs: ${[...this.allowedDirectoryPrefixes].slice(0, 4).join(', ')}`,
+      )
+    } else {
+      summary.push('extra allowed dirs: none')
+    }
+
+    if (this.allowedCommandPatterns.size > 0) {
+      summary.push(
+        `dangerous allowlist: ${[...this.allowedCommandPatterns].slice(0, 4).join(', ')}`,
+      )
+    } else {
+      summary.push('dangerous allowlist: none')
+    }
+
+    if (this.allowedEditPatterns.size > 0) {
+      summary.push(
+        `trusted edit targets: ${[...this.allowedEditPatterns].slice(0, 2).join(', ')}`,
+      )
+    }
+
+    return summary
+  }
+  async ensurePathAccess(targetPath: string, intent: PathIntent): Promise<void> {
+    await this.ready
+    const normalizedTarget = normalizePath(targetPath)
+    if (isWithinDirectory(this.workspaceRoot, normalizedTarget)) {
+      return
+    }
+
+    if (
+      this.sessionAllowedPaths.has(normalizedTarget) ||
+      matchesDirectoryPrefix(normalizedTarget, this.allowedDirectoryPrefixes)
+    ) {
+      return
+    }
+    if (
+      this.sessionDeniedPaths.has(normalizedTarget) ||
+      matchesDirectoryPrefix(normalizedTarget, this.deniedDirectoryPrefixes)
+    ) {
+      throw new Error(`Access denied for path outside cwd: ${normalizedTarget}`)
+    }
+
+    if (!this.prompt) {
+      throw new Error(
+        `Path ${normalizedTarget} is outside cwd ${this.workspaceRoot}. Start minicode in TTY mode to approve it.`,
+      )
+    }
+
+    const scopeDirectory =
+      intent === 'list' || intent === 'command_cwd'
+        ? normalizedTarget
+        : path.dirname(normalizedTarget)
+
+    const promptResult = await this.prompt({
+      kind: 'path',
+      summary: `mini-code wants ${intent.replace('_', ' ')} access outside the current cwd`,
+      details: [
+        `cwd: ${this.workspaceRoot}`,
+        `target: ${normalizedTarget}`,
+        `scope directory: ${scopeDirectory}`,
+      ],
+      scope: scopeDirectory,
+      choices: [
+        { key: 'y', label: 'allow_once', decision: 'allow_once' },
+        { key: 'a', label: 'allow this directory always', decision: 'allow_always' },
+        { key: 'n', label: 'deny once', decision: 'deny_once' },
+        { key: 'd', label: 'deny this directory always', decision: 'deny_always' },
+      ]
+    })
+
+    if (promptResult.decision === 'allow_once') {
+      this.sessionAllowedPaths.add(normalizedTarget)
+      return
+    }
+
+    if (promptResult.decision === 'allow_always') {
+      this.allowedDirectoryPrefixes.add(scopeDirectory)
+      await this.persist()
+      return
+    }
+
+    if (promptResult.decision === 'deny_always') {
+      this.deniedDirectoryPrefixes.add(scopeDirectory)
+      await this.persist()
+    } else {
+      this.sessionDeniedPaths.add(normalizedTarget)
+    }
+    throw new Error(`Access denied for path outside cwd: ${normalizedTarget}`)
+
+  }
+
+  async ensureCommand(
+    command: string,
+    args: string[],
+    commandCwd: string,
+    options?: EnsureCommandOptions
+  ): Promise<void> {
+    await this.ready
+    await this.ensurePathAccess(commandCwd, 'command_cwd')
+    const dangerousReason = classifyDangerousCommand(command, args)
+    const reason = options?.forcePromptReason || dangerousReason
+    if (!reason) {
+      return
+    }
+    const signature = formatCommandSignature(command, args)
+    if (
+      this.sessionDeniedCommands.has(signature) ||
+      this.deniedCommandPatterns.has(signature)
+    ) {
+      throw new Error(`Command denied: ${signature}`)
+    }
+
+    if (
+      this.sessionAllowedCommands.has(signature) ||
+      this.allowedCommandPatterns.has(signature)
+    ) {
+      return
+    }
+
+    if (!this.prompt) {
+      throw new Error(
+        `Command requires approval: ${signature}. Start minicode in TTY mode to approve it.`,
+      )
+    }
+
+    const promptResult = await this.prompt({
+      kind: 'command',
+      summary: options?.forcePromptReason
+        ? 'mini-code wants approval for this command'
+        : 'mini-code wants to run a dangerous command',
+      details: [
+        `cwd: ${commandCwd}`,
+        `command: ${signature}`,
+        `reason: ${reason}`,
+      ],
+      scope: signature,
+      choices: [
+        { key: 'y', label: 'allow once', decision: 'allow_once' },
+        { key: 'a', label: 'always allow this command', decision: 'allow_always' },
+        { key: 'n', label: 'deny once', decision: 'deny_once' },
+        { key: 'd', label: 'always deny this command', decision: 'deny_always' },
+      ],
+    })
+
+    if (promptResult.decision === 'allow_once') {
+      this.sessionAllowedCommands.add(signature)
+      return
+    }
+
+    if (promptResult.decision === 'allow_always') {
+      this.allowedCommandPatterns.add(signature)
+      await this.persist()
+      return
+    }
+
+    if (promptResult.decision === 'deny_always') {
+      this.deniedCommandPatterns.add(signature)
+      await this.persist()
+    } else {
+      this.sessionDeniedCommands.add(signature)
+    }
+
+    throw new Error(`Command denied: ${signature}`)
+  }
+  async ensureEdit(targetPath: string, diffPreview: string): Promise<void> {
+    await this.ready
+
+    const normalizedTarget = normalizePath(targetPath)
+
+    if (
+      this.sessionDeniedEdits.has(normalizedTarget) ||
+      this.deniedEditPatterns.has(normalizedTarget)
+    ) {
+      throw new Error(`Edit denied: ${normalizedTarget}`)
+    }
+
+    if (
+      this.sessionAllowedEdits.has(normalizedTarget) ||
+      this.turnAllowedEdits.has(normalizedTarget) ||
+      this.turnAllowAllEdits ||
+      this.allowedEditPatterns.has(normalizedTarget)
+    ) {
+      return
+    }
+
+    if (!this.prompt) {
+      throw new Error(
+        `Edit requires approval: ${normalizedTarget}. Start minicode in TTY mode to review it.`,
+      )
+    }
+
+    const promptResult = await this.prompt({
+      kind: 'edit',
+      summary: 'mini-code wants to apply a file modification',
+      details: [
+        `target: ${normalizedTarget}`,
+        '',
+        diffPreview,
+      ],
+      scope: normalizedTarget,
+      choices: [
+        { key: '1', label: 'apply once', decision: 'allow_once' },
+        { key: '2', label: 'allow this file in this turn', decision: 'allow_turn' },
+        { key: '3', label: 'allow all edits in this turn', decision: 'allow_all_turn' },
+        { key: '4', label: 'always allow this file', decision: 'allow_always' },
+        { key: '5', label: 'reject once', decision: 'deny_once' },
+        { key: '6', label: 'reject and send guidance to model', decision: 'deny_with_feedback' },
+        { key: '7', label: 'always reject this file', decision: 'deny_always' },
+      ],
+    })
+
+    if (promptResult.decision === 'allow_once') {
+      this.sessionAllowedEdits.add(normalizedTarget)
+      return
+    }
+
+    if (promptResult.decision === 'allow_turn') {
+      this.turnAllowedEdits.add(normalizedTarget)
+      return
+    }
+
+    if (promptResult.decision === 'allow_all_turn') {
+      this.turnAllowAllEdits = true
+      return
+    }
+
+    if (promptResult.decision === 'allow_always') {
+      this.allowedEditPatterns.add(normalizedTarget)
+      await this.persist()
+      return
+    }
+
+    if (promptResult.decision === 'deny_with_feedback') {
+      const guidance = promptResult.feedback?.trim()
+      if (guidance) {
+        throw new Error(
+          `Edit denied: ${normalizedTarget}\nUser guidance: ${guidance}`,
+        )
+      }
+      this.sessionDeniedEdits.add(normalizedTarget)
+      throw new Error(`Edit denied: ${normalizedTarget}`)
+    }
+
+    if (promptResult.decision === 'deny_always') {
+      this.deniedEditPatterns.add(normalizedTarget)
+      await this.persist()
+    } else {
+      this.sessionDeniedEdits.add(normalizedTarget)
+    }
+
+    throw new Error(`Edit denied: ${normalizedTarget}`)
+  }
+}
+
+function getPermissionsPath(): string {
+  return path.join(getMiniCodeDir(), 'permissions.json')
 }

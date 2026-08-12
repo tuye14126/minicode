@@ -67,18 +67,4 @@ export async function applyReviewedFileChange(
   }
 }
 
-export async function confirmDiff(
-  filePath: string,
-  diff: string
-): Promise<boolean> {
-  const promptText = [
-    '─'.repeat(50),
-    `📝 修改预览: ${filePath}`,
-    '─'.repeat(50),
-    diff,
-    '─'.repeat(50),
-    '是否应用以上更改？(y/n): ',
-  ].join('\n')
-  const answer = (await askUserPrompt(promptText)).toLowerCase()
-  return answer === 'y' || answer === 'yes'
-}
+

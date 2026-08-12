@@ -1,18 +1,10 @@
 import z from "zod"
+import type { PermissionManager } from "./permissions.js"
 
 
 export type ToolContext = {
   cwd: string
-  permissions?: ToolPermissions
-}
-
-type EnsureCommandOptions = {
-  forcePromptReason?: string
-}
-export type ToolPermissions = {
-  ensurePathAccess(target: string, intent: 'read' | 'write' | 'list' | 'search'): Promise<void>
-  ensureCommand(command: string, args: string[], cwd: string, options?: EnsureCommandOptions): Promise<void>
-  ensureEdit(target: string, diff: string): Promise<void>
+  permissions?: PermissionManager
 }
 
 export type ToolResult = {

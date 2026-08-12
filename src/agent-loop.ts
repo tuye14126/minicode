@@ -1,14 +1,16 @@
 import OpenAI from 'openai';
 import { replaceLargeToolResult } from './utils/tool-result-storage.js';
 import { ToolRegistry } from './tools.js';
-import { createWorkspacePermissions } from './permissions.js';
+import { PermissionManager } from './permissions.js';
 export type Message = OpenAI.Chat.Completions.ChatCompletionMessageParam
 export async function runAgentTurn(
   client: OpenAI,
   messages: Message[],
   maxTurns = 15,
   model = 'deepseek-v4-flash',
-  registry: ToolRegistry
+  registry: ToolRegistry,
+  permissions: PermissionManager,
+  cwd: string
 ): Promise<string> {
   const toolStore = registry.list()
   for (let turn = 0; turn < maxTurns; turn++) {
@@ -48,7 +50,14 @@ export async function runAgentTurn(
       } catch {
         args = {}
       }
-      const result = await registry.execute(toolName, args, { cwd: process.cwd(), permissions: createWorkspacePermissions(process.cwd()) })
+      const result = await registry.execute(
+        toolName,
+        args,
+        {
+          cwd,
+          permissions
+        }
+      )
       result.output = replaceLargeToolResult(result.output)
       messages.push(
         {

@@ -7,22 +7,26 @@ import test, { afterEach, beforeEach } from "node:test"
 
 import { createDefaultToolRegistry } from "../src/tools/index.js"
 import type { ToolContext, ToolRegistry } from "../src/tools.js"
-import { createWorkspacePermissions } from "../src/permissions.js"
-import { setUserPromptFn } from "../src/user-prompt.js"
+import { PermissionManager } from "../src/permissions.js"
 
 let workspace: string
 let registry: ToolRegistry
 let ctx: ToolContext
+let homedir: string
+let pm: PermissionManager
 
 beforeEach(async () => {
+  homedir = mkdtempSync(path.join(tmpdir(), "minicode-tools-home"))
+  process.env.MINI_CODE_HOME = homedir
   workspace = mkdtempSync(path.join(tmpdir(), "minicode-tools-"))
   registry = await createDefaultToolRegistry({ cwd: workspace, runtime: null })
-  ctx = { cwd: workspace }
-  setUserPromptFn(async () => "y") // 默认自动批准权限弹窗
+  pm = new PermissionManager(workspace, async () => ({ decision: 'allow_once' }))
+  ctx = { cwd: workspace, permissions: pm }
 })
 
 afterEach(() => {
-  setUserPromptFn(async (promptText) => promptText) // 恢复中性实现，避免阻塞 stdin
+  delete process.env.MINI_CODE_HOME
+  rmSync(homedir, { recursive: true, force: true })
   rmSync(workspace, { recursive: true, force: true })
 })
 
@@ -72,13 +76,13 @@ test("非法入参：web_fetch 非法 URL", async () => {
 })
 
 test("越界路径：read_file 读取工作区外", async () => {
-  const result = await registry.execute("read_file", { path: "../../secret.txt" }, ctx)
+  const result = await registry.execute("read_file", { path: "../../secret.txt" }, { cwd: workspace })
   assert.equal(result.ok, false)
   assert.match(result.output, /Path escapes workspace/)
 })
 
 test("越界路径：write_file 写入工作区外", async () => {
-  const result = await registry.execute("write_file", { path: "../../evil.txt", content: "x" }, ctx)
+  const result = await registry.execute("write_file", { path: "../../evil.txt", content: "x" }, { cwd: workspace })
   assert.equal(result.ok, false)
   assert.match(result.output, /Path escapes workspace/)
 })
@@ -237,8 +241,8 @@ test("ask_user 返回 awaitUser 标记", async () => {
 })
 
 test("编辑审批被拒绝时返回 ok:false 且不落盘", async () => {
-  setUserPromptFn(async () => "n")
-  const permCtx = { cwd: workspace, permissions: createWorkspacePermissions(workspace) }
+  const pm = new PermissionManager(workspace, async () => ({ decision: 'deny_once' }))
+  const permCtx = { cwd: workspace, permissions: pm }
   const result = await registry.execute("write_file", { path: "denied.txt", content: "x" }, permCtx)
   assert.equal(result.ok, false)
   assert.equal(existsSync(path.join(workspace, "denied.txt")), false)

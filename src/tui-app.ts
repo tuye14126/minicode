@@ -7,6 +7,7 @@ import { computeContextStats } from "./utils/token-estimator.js"
 import { setUserPromptFn } from "./user-prompt.js"
 import { createDefaultToolRegistry } from "./tools/index.js"
 import { loadRuntimeConfig } from "./config.js"
+import { PermissionManager } from "./permissions.js"
 
 
 const screen = new Screen()
@@ -104,17 +105,18 @@ function closeModal(value: string): void {
 }
 
 async function main(): Promise<void> {
-
+  const cwd = process.cwd()
+  const permissions = new PermissionManager(cwd)
   screen.enter()
   let input = ''
   let cursor = 0
   messages.push({
     "role": "system",
-    "content": buildSystemPrompt(process.cwd()),
+    "content": buildSystemPrompt(cwd),
   })
   draw(input, cursor)
   const runtime = loadRuntimeConfig()
-  const registry = await createDefaultToolRegistry({ cwd: process.cwd(), runtime })
+  const registry = await createDefaultToolRegistry({ cwd, runtime })
   process.stdin.on('data', async (chunk: Buffer) => {
     const event = parseKeyEvent(chunk)
 
@@ -179,7 +181,7 @@ async function main(): Promise<void> {
 
         try {
           const startTime = Date.now()
-          const reply = await runAgentTurn(client, messages, 15, MODEL, registry)
+          const reply = await runAgentTurn(client, messages, 15, MODEL, registry, permissions, cwd)
           lastElapsed = Number(((Date.now() - startTime) / 1000).toFixed(1))
           showMessages.push({ kind: 'ai', text: reply })
         } catch (e: any) {

@@ -9,6 +9,7 @@ import { computeContextStats } from "./utils/token-estimator.js";
 import { compactConversation } from "./compact.js";
 import { loadRuntimeConfig } from "./config.js";
 import { createDefaultToolRegistry } from "./tools/index.js";
+import { PermissionManager } from "./permissions.js";
 
 
 const runtime = loadRuntimeConfig()
@@ -18,6 +19,7 @@ const registry = await createDefaultToolRegistry({
   cwd: process.cwd(),
   runtime
 })
+
 
 const SLASHCOMMANDS = [
   { usage: '/help', description: '显示帮助' },
@@ -70,6 +72,9 @@ async function main() {
       "content": buildSystemPrompt(process.cwd()),
     },
   ]
+  const cwd = process.cwd()
+  const permissions = new PermissionManager(cwd)
+
 
   while (true) {
     // console.log(messages);
@@ -138,7 +143,8 @@ async function main() {
     }
     try {
       const startTime = Date.now()
-      const reply = await runAgentTurn(client, messages, 15, MODEL, registry)
+      permissions.resetTurn()
+      const reply = await runAgentTurn(client, messages, 15, MODEL, registry, permissions, cwd)
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1)
       const contextStats = computeContextStats(messages, MODEL)
       const pct = (contextStats.utilization * 100).toFixed(1)
