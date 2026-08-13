@@ -12,6 +12,8 @@ export type RuntimeConfig = {
   model: string
   baseUrl: string
   apiKey: string
+  authToken?: string
+  maxOutputTokens?: number
   sourceSummary: string
 }
 

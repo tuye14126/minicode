@@ -1,5 +1,4 @@
 import { createTwoFilesPatch } from "diff"
-import { askUserPrompt } from "./user-prompt.js"
 import { readFile, writeFile } from "node:fs/promises"
 import { isEnoentError } from "./utils/errors.js"
 import { ToolContext, ToolResult } from "./tools.js"
