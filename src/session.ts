@@ -1,7 +1,7 @@
 import path from "node:path"
-import { Message } from "./agent-loop.js"
 import { homedir } from "node:os"
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync } from "node:fs"
+import { ChatMessage } from "./types.js"
 
 const MINI_CODE_DIR = path.join(homedir(), '.mini-code')
 const PROJECTS_DIR = path.join(MINI_CODE_DIR, 'projects')
@@ -19,7 +19,7 @@ function sessionFilePath(cwd: string, sessionId: string): string {
 }
 
 export function saveSession(
-  messages: Message[],
+  messages: ChatMessage[],
   sessionId: string,
   cwd: string
 ): void {
@@ -47,13 +47,13 @@ export function saveSession(
 export function loadSession(
   sessionId: string,
   cwd: string
-): Message[] | null {
+): ChatMessage[] | null {
   const file = sessionFilePath(cwd, sessionId)
   if (!existsSync(file)) return null
   const lines = readFileSync(file, 'utf-8').trim()
     .split('\n').filter(Boolean)
   if (lines.length === 0) return null
-  return lines.map(message => JSON.parse(message) as Message)
+  return lines.map(message => JSON.parse(message) as ChatMessage)
 }
 
 export function listSessions(cwd: string) {

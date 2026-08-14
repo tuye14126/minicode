@@ -9,7 +9,7 @@ export type ProviderUsage = {
 
 
 export type ProviderUsageMetadata = {
-  providerUsage: ProviderUsage
+  providerUsage?: ProviderUsage
   usageStale?: boolean
   usageStaleReason?: string
 }
@@ -30,7 +30,7 @@ export type ChatMessage =
   | ({ role: 'user', content: string } & MessageIdentity)
   | ({ role: 'assistant_thinking', blocks: ProviderThinkingBlock[] } & MessageIdentity)
   | ({ role: 'assistant', content: string } & ProviderUsageMetadata & MessageIdentity)
-  | ({ role: 'assistant_process', content: string } & ProviderUsageMetadata & MessageIdentity)
+  | ({ role: 'assistant_progress', content: string } & ProviderUsageMetadata & MessageIdentity)
   | ({
     role: 'assistant_tool_call',
     toolUseId: string,
@@ -62,7 +62,7 @@ export type ChatMessage =
 export type ToolCall = {
   id: string,
   toolName: string,
-  input: string
+  input: unknown
 }
 
 export type StepDiagnostics = {

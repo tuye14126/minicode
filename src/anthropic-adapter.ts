@@ -47,9 +47,9 @@ function pushAnthropicMessage(
   messages.push({ role, content: [block] })
 }
 
-function toAssistantText(message: Extract<ChatMessage, { role: 'assistant' | 'assistant_process' }>)
+function toAssistantText(message: Extract<ChatMessage, { role: 'assistant' | 'assistant_progress' }>)
   : string {
-  if (message.role === 'assistant_process') {
+  if (message.role === 'assistant_progress') {
     return `<progress>\n${message.content}\n</progress>`
   }
   return message.content
@@ -80,7 +80,7 @@ function toAnthropicMessages(messages: ChatMessage[]): {
       }
       continue
     }
-    if (message.role === 'assistant' || message.role === 'assistant_process') {
+    if (message.role === 'assistant' || message.role === 'assistant_progress') {
       pushAnthropicMessage(converted, 'assistant', toTextBlock(toAssistantText(message)))
       continue
     }
@@ -280,12 +280,15 @@ function normalizeAnthropicUsage(usage: AnthropicUsage | undefined): ProviderUsa
   }
 }
 
-
 export class AnthropicModelAdapter implements ModelAdapter {
   constructor(
     private readonly getRuntimeConfig: () => Promise<RuntimeConfig>,
     private readonly tools: ToolRegistry
   ) { }
+
+  /*将自定义的Chatmessages格式的消息转换为Anthropic消息格式, 访问大模型, 得到response后
+  再进行解析,得到两种AgentStep格式的返回值, 后续可再将AgentStep转换为ChatMessages格式
+  放到messages历史消息中*/
   async next(messages: ChatMessage[]): Promise<AgentStep> {
     const runtime = await this.getRuntimeConfig()
     const payload = toAnthropicMessages(messages)

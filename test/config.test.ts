@@ -22,7 +22,7 @@ test("settings.json合并与env覆盖", async () => {
     model: 'from-settings',
     env: { OPENAI_BASE_URL: 'https://from-settings.test', OPENAI_API_KEY: 'settings-key' }
   }))
-  const runtime = config.loadRuntimeConfig({
+  const runtime = await config.loadRuntimeConfig({
     ...process.env,
     MINI_CODE_MODEL: 'from-env'
   })

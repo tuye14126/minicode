@@ -13,6 +13,7 @@ export type RuntimeConfig = {
   baseUrl: string
   apiKey: string
   authToken?: string
+  modelMode: string
   maxOutputTokens?: number
   sourceSummary: string
 }
@@ -51,9 +52,9 @@ export function saveMiniCodeSettings(updates: MiniCodeSettings) {
   writeFileSync(getMiniCodeSettingsPath(), JSON.stringify(after, null, 2) + '\n', 'utf-8')
 }
 
-export function loadRuntimeConfig(
+export async function loadRuntimeConfig(
   env: NodeJS.ProcessEnv = process.env
-): RuntimeConfig {
+): Promise<RuntimeConfig> {
   const settings = readMiniCodeSettings()
   const mergeEnv = {
     ...(settings.env ?? {}),
@@ -62,19 +63,21 @@ export function loadRuntimeConfig(
   const model =
     mergeEnv.MINI_CODE_MODEL?.trim() ||
     settings.model?.trim() ||
-    mergeEnv.OPENAI_MODEL?.trim() ||
+    mergeEnv.ANTHROPIC_MODEL?.trim() ||
     "deepseek-v4-flash"
   const baseUrl =
-    mergeEnv.OPENAI_BASE_URL?.trim() ||
+    mergeEnv.ANTHROPIC_BASE_URL?.trim() ||
     "https://api.openai.com/v1"
-  const apiKey = mergeEnv.OPENAI_API_KEY?.trim()
-  if (!apiKey) {
-    throw new Error("缺少 OPENAI_API_KEY：请在 .env 或 ~/.mini-code/settings.json 中配置")
+  const apiKey = mergeEnv.ANTHROPIC_API_KEY?.trim() || ''
+  const modelMode = mergeEnv.MINI_CODE_MODEL_MODE?.trim() || ''
+  if (!apiKey && modelMode !== 'mock') {
+    throw new Error("缺少 ANTHROPIC_API_KEY:请在 .env 或 ~/.mini-code/settings.json 中配置")
   }
   return {
     model,
     baseUrl,
     apiKey,
+    modelMode,
     sourceSummary: "env > ~/.mini-code/settings.json",
   }
 }

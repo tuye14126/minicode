@@ -2,12 +2,15 @@ import OpenAI from "openai"
 import { parseKeyEvent } from "./tui/input.js"
 import { Screen } from "./tui/screen.js"
 import { buildSystemPrompt } from "./prompt.js"
-import { Message, runAgentTurn } from "./agent-loop.js"
+import { runAgentTurn } from "./agent-loop.js"
 import { computeContextStats } from "./utils/token-estimator.js"
 import { setUserPromptFn } from "./user-prompt.js"
 import { createDefaultToolRegistry } from "./tools/index.js"
 import { loadRuntimeConfig } from "./config.js"
 import { PermissionManager } from "./permissions.js"
+import { ChatMessage } from "./types.js"
+import { MockModelAdapter } from "./mock-model.js"
+import { AnthropicModelAdapter } from "./anthropic-adapter.js"
 
 
 const screen = new Screen()
@@ -21,7 +24,7 @@ let tmpInput = ''
 
 let lastElapsed = 0
 
-const messages: Message[] = []
+const messages: ChatMessage[] = []
 
 
 const client = new OpenAI({
@@ -34,6 +37,7 @@ type Modal = { promptText: string, input: string, resolve: (v: string) => void }
 let modal: Modal | null = null
 
 let busy = false
+
 
 
 
@@ -115,8 +119,13 @@ async function main(): Promise<void> {
     "content": buildSystemPrompt(cwd),
   })
   draw(input, cursor)
-  const runtime = loadRuntimeConfig()
+  const runtime = await loadRuntimeConfig()
   const registry = await createDefaultToolRegistry({ cwd, runtime })
+
+  const model = runtime.modelMode === 'mock'
+    ? new MockModelAdapter()
+    : new AnthropicModelAdapter(loadRuntimeConfig, registry)
+
   process.stdin.on('data', async (chunk: Buffer) => {
     const event = parseKeyEvent(chunk)
 
@@ -181,9 +190,21 @@ async function main(): Promise<void> {
 
         try {
           const startTime = Date.now()
-          const reply = await runAgentTurn(client, messages, 15, MODEL, registry, permissions, cwd)
+          const reply = await runAgentTurn({
+            messages,
+            maxSteps: 15,
+            model,
+            tools: registry,
+            permissions,
+            cwd
+          })
           lastElapsed = Number(((Date.now() - startTime) / 1000).toFixed(1))
-          showMessages.push({ kind: 'ai', text: reply })
+          const lastMessage = reply[-1]
+          showMessages.push({
+            kind: 'ai', text: lastMessage.role === 'assistant'
+              ? lastMessage.content
+              : ''
+          })
         } catch (e: any) {
           showMessages.push({ kind: 'status', text: `错误: ${e.message}` })
         } finally {
