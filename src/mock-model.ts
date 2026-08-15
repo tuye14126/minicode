@@ -5,27 +5,30 @@ function lastUserMessage(messages: ChatMessage[]): string {
   return last?.content ?? ''
 }
 
-function lastToolMessage(messages: ChatMessage[]): ChatMessage | undefined {
-  return [...messages].reverse().find(message => message.role === 'tool_result')
+// 只有当最后一条消息是 tool_result 时, 才认为是在响应工具结果。
+// 否则上一次命令遗留的 tool_result 会被误当成当前命令的结果。
+function latestToolResult(messages: ChatMessage[]): Extract<ChatMessage, { role: 'tool_result' }> | undefined {
+  const last = messages[messages.length - 1]
+  return last?.role === 'tool_result' ? last : undefined
 }
 
-function extractLatestAssistantCall(messages: ChatMessage[]): string | undefined {
-  const last = [...messages]
+function matchingToolCall(messages: ChatMessage[], toolUseId: string): string | undefined {
+  const call = [...messages]
     .reverse()
     .find(
       message =>
-        message.role === 'assistant_tool_call',
+        message.role === 'assistant_tool_call' && message.toolUseId === toolUseId,
     )
-  return last?.role === 'assistant_tool_call'
-    ? last.toolName
+  return call?.role === 'assistant_tool_call'
+    ? call.toolName
     : undefined
 }
 
 export class MockModelAdapter implements ModelAdapter {
   async next(messages: ChatMessage[]): Promise<AgentStep> {
-    const toolMessage = lastToolMessage(messages)
-    if (toolMessage?.role === 'tool_result') {
-      const lastCall = extractLatestAssistantCall(messages)
+    const toolMessage = latestToolResult(messages)
+    if (toolMessage) {
+      const lastCall = matchingToolCall(messages, toolMessage.toolUseId)
       if (lastCall === 'list_files') {
         return {
           type: 'assistant',

@@ -1,4 +1,3 @@
-import OpenAI from "openai"
 import { parseKeyEvent } from "./tui/input.js"
 import { Screen } from "./tui/screen.js"
 import { buildSystemPrompt } from "./prompt.js"
@@ -27,10 +26,7 @@ let lastElapsed = 0
 const messages: ChatMessage[] = []
 
 
-const client = new OpenAI({
-  apiKey: process.env['OPENAI_API_KEY'],
-  baseURL: process.env['OPENAI_BASE_URL']
-});
+
 const MODEL = 'deepseek-v4-flash'
 
 type Modal = { promptText: string, input: string, resolve: (v: string) => void }

@@ -11,9 +11,9 @@ export type MiniCodeSettings = {
 export type RuntimeConfig = {
   model: string
   baseUrl: string
-  apiKey: string
+  apiKey?: string
   authToken?: string
-  modelMode: string
+  modelMode?: string
   maxOutputTokens?: number
   sourceSummary: string
 }

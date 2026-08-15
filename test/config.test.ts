@@ -20,7 +20,7 @@ test("settings.json合并与env覆盖", async () => {
   const config = await import('../src/config.js')
   writeFileSync(path.join(homedir, "settings.json"), JSON.stringify({
     model: 'from-settings',
-    env: { OPENAI_BASE_URL: 'https://from-settings.test', OPENAI_API_KEY: 'settings-key' }
+    env: { ANTHROPIC_BASE_URL: 'https://from-settings.test', ANTHROPIC_API_KEY: 'settings-key' }
   }))
   const runtime = await config.loadRuntimeConfig({
     ...process.env,

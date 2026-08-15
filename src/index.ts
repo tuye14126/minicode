@@ -72,7 +72,7 @@ async function main() {
     },
   ]
   const cwd = process.cwd()
-  const permissions = new PermissionManager(cwd)
+  const permissions = new PermissionManager(cwd, async () => ({ decision: 'allow_once' }))
   const model = runtime.modelMode === 'mock'
     ? new MockModelAdapter()
     : new AnthropicModelAdapter(loadRuntimeConfig, registry)
@@ -92,49 +92,49 @@ async function main() {
       break
     }
     if (!input) continue
-    if (input.startsWith('/')) {
-      if (input === '/new') {
-        messages = [{ role: 'system', content: buildSystemPrompt(process.cwd()) }]
-        sessionId = crypto.randomUUID().slice(0, 8)
-        console.log('\n已开始新会话\n')
-        continue
-      }
-      if (input.startsWith('/resume ')) {
-        const id = input.slice('/resume '.length).trim()
-        const target = loadSession(id, process.cwd())
-        if (target) {
-          messages = [{ "role": "system", "content": buildSystemPrompt(process.cwd()) }]
-          messages.push(...target.filter(m => m.role !== 'system'))
-          sessionId = id
-          console.log(`\n已恢复会话 ${id}\n`)
-        } else {
-          console.log(`\n会话 ${id} 不存在\n`)
-        }
-        continue
-      }
+    // if (input.startsWith('/')) {
+    //   if (input === '/new') {
+    //     messages = [{ role: 'system', content: buildSystemPrompt(process.cwd()) }]
+    //     sessionId = crypto.randomUUID().slice(0, 8)
+    //     console.log('\n已开始新会话\n')
+    //     continue
+    //   }
+    //   if (input.startsWith('/resume ')) {
+    //     const id = input.slice('/resume '.length).trim()
+    //     const target = loadSession(id, process.cwd())
+    //     if (target) {
+    //       messages = [{ "role": "system", "content": buildSystemPrompt(process.cwd()) }]
+    //       messages.push(...target.filter(m => m.role !== 'system'))
+    //       sessionId = id
+    //       console.log(`\n已恢复会话 ${id}\n`)
+    //     } else {
+    //       console.log(`\n会话 ${id} 不存在\n`)
+    //     }
+    //     continue
+    //   }
 
-      // if (input === '/compact') {
-      //   const stats = computeContextStats(messages, MODEL)
-      //   console.log(`\n压缩前上下文: ${stats.totalTokens} tokens\n`)
-      //   const compacted = await compactConversation(client, messages, MODEL)
-      //   if (compacted) {
-      //     messages = compacted
-      //     const newStats = computeContextStats(messages, MODEL)
-      //     console.log(`已压缩: ${stats.totalTokens} → ${newStats.totalTokens} tokens\n`)
-      //   } else {
-      //     console.log('没有可压缩的内容。\n')
-      //   }
-      //   continue
-      // }
+    //   // if (input === '/compact') {
+    //   //   const stats = computeContextStats(messages, MODEL)
+    //   //   console.log(`\n压缩前上下文: ${stats.totalTokens} tokens\n`)
+    //   //   const compacted = await compactConversation(client, messages, MODEL)
+    //   //   if (compacted) {
+    //   //     messages = compacted
+    //   //     const newStats = computeContextStats(messages, MODEL)
+    //   //     console.log(`已压缩: ${stats.totalTokens} → ${newStats.totalTokens} tokens\n`)
+    //   //   } else {
+    //   //     console.log('没有可压缩的内容。\n')
+    //   //   }
+    //   //   continue
+    //   // }
 
-      const localResult = handleLocalCommand(input)
-      if (localResult !== null) {
-        console.log(`\n${localResult}\n`)
-        continue
-      }
-      console.log(`\n未识别的命令: ${input}，输入 /help 查看\n`)
-      continue
-    }
+    //   const localResult = handleLocalCommand(input)
+    //   if (localResult !== null) {
+    //     console.log(`\n${localResult}\n`)
+    //     continue
+    //   }
+    //   console.log(`\n未识别的命令: ${input}，输入 /help 查看\n`)
+    //   continue
+    // }
     messages.push({ "role": "user", "content": input })
     // 压缩上下文
     // const stats = computeContextStats(messages, MODEL)
@@ -161,7 +161,9 @@ async function main() {
         contextStats.warningLevel === 'critical' ? '⚠️ 告警' :
           contextStats.warningLevel === 'warning' ? '注意' : '正常'
       saveSession(messages, sessionId, process.cwd())
-      console.log(`\nAI: ${reply}\n`)
+      const last = reply.filter(m => m.role === 'assistant').at(-1)
+      const replyText = last?.role === 'assistant' ? last.content : ''
+      console.log(`\nAI: ${replyText}\n`)
       console.log(`  上下文: ${contextStats.totalTokens} / ${contextStats.contextWindow} tokens (${pct}%) [${level}]`)
       console.log(`  ⏱ 用时 ${elapsed}s`)
       console.log('')
