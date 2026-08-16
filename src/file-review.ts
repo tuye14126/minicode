@@ -1,7 +1,7 @@
 import { createTwoFilesPatch } from "diff"
 import { readFile, writeFile } from "node:fs/promises"
 import { isEnoentError } from "./utils/errors.js"
-import { ToolContext, ToolResult } from "./tools.js"
+import { ToolContext, ToolResult } from "./tool.js"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
 

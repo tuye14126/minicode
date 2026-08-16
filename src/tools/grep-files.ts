@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { ToolDefinition } from "../tools.js";
+import { ToolDefinition } from "../tool.js";
 import z from "zod";
 import { resolveToolPath } from "../workspace.js";
 

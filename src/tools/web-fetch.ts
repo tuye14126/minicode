@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import type { ToolDefinition } from '../tools.js'
+import type { ToolDefinition } from '../tool.js'
 import { fetchWebPage } from '../utils/web.js'
 
 type Input = {

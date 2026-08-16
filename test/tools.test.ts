@@ -6,7 +6,7 @@ import path from "node:path"
 import test, { afterEach, beforeEach } from "node:test"
 
 import { createDefaultToolRegistry } from "../src/tools/index.js"
-import type { ToolContext, ToolRegistry } from "../src/tools.js"
+import type { ToolContext, ToolRegistry } from "../src/tool.js"
 import { PermissionManager } from "../src/permissions.js"
 
 let workspace: string

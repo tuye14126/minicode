@@ -1,5 +1,5 @@
 import z from "zod"
-import { ToolDefinition } from "../tools.js"
+import { ToolDefinition } from "../tool.js"
 import { parseHTML } from "linkedom"
 
 type Input = {

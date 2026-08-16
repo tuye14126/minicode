@@ -4,7 +4,7 @@ import path from "node:path";
 import test, { afterEach, beforeEach } from "node:test";
 import { ChatMessage, ModelAdapter, AgentStep } from "../src/types.js";
 import { runAgentTurn } from "../src/agent-loop.js";
-import { ToolRegistry } from "../src/tools.js";
+import { ToolRegistry } from "../src/tool.js";
 import { tokenCountWithEstimation } from "../src/utils/token-estimator.js";
 import assert from "node:assert";
 

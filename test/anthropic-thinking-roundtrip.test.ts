@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { z } from 'zod'
 import { AnthropicModelAdapter } from '../src/anthropic-adapter.js'
 import { runAgentTurn } from '../src/agent-loop.js'
-import { ToolRegistry } from '../src/tools.js'
+import { ToolRegistry } from '../src/tool.js'
 import type { RuntimeConfig } from '../src/config.js'
 import type { ChatMessage } from '../src/types.js'
 

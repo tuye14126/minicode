@@ -1,5 +1,5 @@
 import z from "zod"
-import { ToolDefinition } from "../tools.js"
+import { ToolDefinition } from "../tool.js"
 import { resolveToolPath } from "../workspace.js"
 import { readFile } from "node:fs/promises"
 import { applyReviewedFileChange } from "../file-review.js"

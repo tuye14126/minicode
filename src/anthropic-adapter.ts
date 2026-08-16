@@ -1,5 +1,5 @@
 import { RuntimeConfig } from "./config.js";
-import { ToolRegistry } from "./tools.js";
+import { ToolRegistry } from "./tool.js";
 import { AgentStep, ChatMessage, ModelAdapter, ProviderThinkingBlock, ProviderUsage, StepDiagnostics, ToolCall } from "./types.js";
 
 

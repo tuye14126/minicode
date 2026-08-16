@@ -1,5 +1,5 @@
 import path from "node:path";
-import { ToolContext } from "./tools.js";
+import { ToolContext } from "./tool.js";
 
 
 export async function resolveToolPath(

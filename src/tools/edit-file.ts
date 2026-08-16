@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { z } from 'zod'
 import { applyReviewedFileChange } from '../file-review.js'
-import type { ToolDefinition } from '../tools.js'
+import type { ToolDefinition } from '../tool.js'
 import { resolveToolPath } from '../workspace.js'
 
 type Input = {

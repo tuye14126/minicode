@@ -256,7 +256,7 @@ npm run dev                                      # 能启动并进入对话
 
 验收标准：`npm test` 有工具级测试；未知工具、非法入参、越界路径分别返回 `ok:false` 与可读原因。
 > 验证结果：`npm run check` 0 error；`npm test` 通过（21 个工具级测试：未知工具/非法入参/越界路径返回 ok:false；read_file 分块、edit_file replaceAll、patch_file 原子性、run_command args/cwd 等）；旧 definitions.ts/handlers.ts 已删除。
-### T3（P0）权限系统：PermissionManager
+### [完成] T3（P0）权限系统：PermissionManager
 
 范围：
 
@@ -266,7 +266,7 @@ npm run dev                                      # 能启动并进入对话
 
 验收标准：工作目录内放行；工作目录外路径弹窗；危险命令弹窗；编辑 diff 弹窗；拒绝选择持久化；取消弹窗不等于允许。
 
-### T4（P0）模型适配层：types + AnthropicAdapter + MockModel
+### [完成] T4（P0）模型适配层：types + AnthropicAdapter + MockModel
 
 范围：
 
