@@ -45,6 +45,24 @@ export type TokenAccountingResult = {
   reason?: string
 }
 
+export function markProviderUsageStale(
+  message: ChatMessage,
+  reason: string,
+): ChatMessage {
+  if (
+    (message.role === 'assistant' ||
+      message.role === 'assistant_progress' ||
+      message.role === 'assistant_tool_call') &&
+    message.providerUsage
+  ) {
+    return {
+      ...message,
+      usageStale: true,
+      usageStaleReason: reason,
+    }
+  }
+  return message
+}
 
 
 function messageProviderUsage(message: ChatMessage): ProviderUsage | undefined {

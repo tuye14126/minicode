@@ -1,0 +1,6 @@
+
+export const SNIP_COMPACT_THRESHOLD = 0.70
+export const SNIP_KEEP_RECENT_MESSAGES = 12
+export const SNIP_MIN_MESSAGES_TO_REMOVE = 6
+export const SNIP_MIN_TOKENS_TO_FREE = 2_000
+export const SNIP_TARGET_USAGE = 0.60
