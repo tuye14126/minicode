@@ -47,7 +47,7 @@ export type ChatMessage =
   | ({
     role: 'context_summary',
     content: string,
-    compressCount: number,
+    compressedCount: number,
     timestamp: number
   } & MessageIdentity)
   | ({

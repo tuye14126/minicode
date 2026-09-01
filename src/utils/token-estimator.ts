@@ -18,6 +18,8 @@ export type ContextStats = {
   accounting: TokenAccountingResult
 }
 
+export const CLEAR_MARKER = '[Output cleared for context space]'
+
 
 const CHARS_PER_TOKEN: Record<string, number> = {
   system: 3.5,

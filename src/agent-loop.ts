@@ -1,8 +1,13 @@
 import { PendingToolResult, replaceLargeToolResult } from './utils/tool-result-storage.js';
 import { ToolRegistry } from './tool.js';
 import { PermissionManager } from './permissions.js';
-import { ChatMessage, ModelAdapter, ProviderThinkingBlock, ProviderUsage } from './types.js';
+import { ChatMessage, CompressionResult, ModelAdapter, ProviderThinkingBlock, ProviderUsage } from './types.js';
 import { OpenAI } from 'openai/client.js';
+import { computeContextStats } from './utils/token-estimator.js';
+import { snipCompactConversation, SnipCompactResult } from './compact/snipCompact.js';
+import { microcompact } from './compact/microcompact.js';
+import { applyContextCollapseIfNeeded, ContextCollapseResult, ContextCollapseState, createContextCollapseState } from './compact/context-collapse.js';
+import { autoCompact } from './compact/auto-compact.js';
 export type Message = OpenAI.Chat.Completions.ChatCompletionMessageParam
 function isEmptyAssistantResponse(content: string): boolean {
   return content.trim().length === 0
@@ -81,6 +86,7 @@ export async function runAgentTurn(args: {
   messages: ChatMessage[],
   maxSteps?: number,
   model: ModelAdapter,
+  modelName?: string,
   tools: ToolRegistry,
   permissions?: PermissionManager,
   cwd: string,
@@ -88,6 +94,12 @@ export async function runAgentTurn(args: {
   onAssistantMessage?: (content: string, metadata?: { final?: boolean }) => void,
   onToolStart?: (toolName: string, input: unknown) => void,
   onToolResult?: (toolName: string, output: string, isError: boolean) => void
+  onSnipCompact?: (result: SnipCompactResult) => void | Promise<void>
+  onContextStats?: (stats: import('./utils/token-estimator.js').ContextStats) => void,
+  onContextCollapse?: (result: ContextCollapseResult) => void | Promise<void>,
+  onAutoCompact?: (result: CompressionResult) => void | Promise<void>,
+  contextCollapseState?: ContextCollapseState
+
 }): Promise<ChatMessage[]> {
   const maxSteps = args.maxSteps ?? 15
   let messages = args.messages
@@ -95,6 +107,11 @@ export async function runAgentTurn(args: {
   let recoverableThinkingRetryCount = 0
   let toolErrorCount = 0
   let emptyResponseRetryCount = 0
+  let snippedThisTurn = false
+
+  const modelName = args.modelName ?? ''
+  let contextCollapseState =
+    args.contextCollapseState ?? createContextCollapseState()
 
   const appendThinkingBlocks = (blocks: ProviderThinkingBlock[] | undefined) => {
     if (!blocks || blocks.length === 0) return
@@ -106,6 +123,16 @@ export async function runAgentTurn(args: {
       }
     ]
   }
+
+  const replaceContextCollapseState = (nextState: ContextCollapseState) => {
+    contextCollapseState = nextState
+    if (args.contextCollapseState) {
+      args.contextCollapseState.spans = [...nextState.spans]
+      args.contextCollapseState.enabled = nextState.enabled
+      args.contextCollapseState.consecutiveFailures = nextState.consecutiveFailures
+    }
+  }
+
   const pushContinuationPrompt = (content: string) => {
     messages = [
       ...messages,
@@ -116,10 +143,76 @@ export async function runAgentTurn(args: {
     ]
   }
   for (let turn = 0; turn < maxSteps; turn++) {
-    const agentStep = await args.model.next(messages)
+
+    let latestStats: import('./utils/token-estimator.js').ContextStats | null = null
+    // 专门为大模型提供的消息,可能包含折叠视图
+    let modelMessages = messages
+    if (modelName) {
+      latestStats = computeContextStats(messages, modelName)
+      // 滑动截断：保留开头和结尾 裁去中间
+      if (!snippedThisTurn) {
+        const snipResult = await snipCompactConversation({
+          messages,
+          contextStats: latestStats,
+          modelContextWindow: latestStats.contextWindow
+        })
+        if (snipResult.didSnip) {
+          messages = snipResult.messages
+          snippedThisTurn = true
+          await args.onSnipCompact?.(snipResult)
+          latestStats = computeContextStats(messages, modelName)
+          args.onContextStats?.(latestStats)
+        }
+      }
+
+      // 对部分工具的调用结果进行压缩
+      const beforeMicrocompact = messages
+      messages = microcompact(messages, modelName)
+      if (messages !== beforeMicrocompact) {
+        latestStats = computeContextStats(messages, modelName)
+        args.onContextStats?.(latestStats)
+      }
+
+      // 利用大模型对历史消息进行摘要压缩, 不影响真实message, 会产生一个折叠后的视图
+      const collapseResult = await applyContextCollapseIfNeeded(
+        messages,
+        modelName,
+        args.model,
+        contextCollapseState,
+      )
+      // 进行消息折叠后更新全局CollapseState
+      replaceContextCollapseState(collapseResult.state)
+      modelMessages = collapseResult.messages
+      if (collapseResult.collapsed) {
+        await args.onContextCollapse?.(collapseResult)
+        latestStats = computeContextStats(modelMessages, modelName)
+        args.onContextStats?.(latestStats)
+      } else if (modelMessages !== messages) {
+        latestStats = computeContextStats(modelMessages, modelName)
+        args.onContextStats?.(latestStats)
+      }
+
+    }
 
 
+    // 自动压缩, 直接压缩真实的消息, 仅在刚开始进行一次
+    if (turn == 0 && modelName) {
+      latestStats = latestStats ?? computeContextStats(modelMessages, modelName)
+      args.onContextStats?.(latestStats)
+      if (latestStats.warningLevel === 'critical' || latestStats.warningLevel === 'blocked') {
+        const result = await autoCompact(modelMessages, modelName, args.model)
+        if (result) {
+          messages = result.messages
+          modelMessages = messages
+          replaceContextCollapseState(createContextCollapseState())
+          await args.onAutoCompact?.(result)
+          latestStats = computeContextStats(messages, modelName)
+          args.onContextStats?.(latestStats)
+        }
+      }
+    }
 
+    const agentStep = await args.model.next(modelMessages)
 
     if (agentStep.type === 'assistant') {
       const isEmpty = isEmptyAssistantResponse(agentStep.content)
