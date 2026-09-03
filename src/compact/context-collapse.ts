@@ -1,7 +1,7 @@
 import { ChatMessage, ModelAdapter } from "../types.js"
 import { computeContextStats, estimateMessagesTokens, markProviderUsageStale } from "../utils/token-estimator.js"
 import { CONTEXT_COLLAPSE_KEEP_RECENT_MESSAGES, CONTEXT_COLLAPSE_MAX_FAILURES, CONTEXT_COLLAPSE_MAX_SPANS_PER_PASS, CONTEXT_COLLAPSE_MIN_TOKENS_TO_SAVE, CONTEXT_COLLAPSE_TARGET_USAGE, CONTEXT_COLLAPSE_UTILIZATION } from "./constants.js"
-import { parseSummaryFromResponse } from "./prompts.js"
+import { parseSummaryFromResponse } from "./prompt.js"
 
 
 type MessageGroup = {

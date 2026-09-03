@@ -33,6 +33,11 @@ export function shouldAutoCompact(messages: ChatMessage[], model: string): boole
   return shouldCompact
 }
 
+export function resetAutoCompactState(): void {
+  state.consecutiveFailures = 0
+  state.disabled = false
+}
+
 export async function autoCompact(
   messages: ChatMessage[],
   model: string,

@@ -33,7 +33,7 @@ export function microcompact(
     for (let i = 0; i < messages.length; i++) {
         const msg = messages[i]
         if (indicesToClear.has(i) && msg.role === 'tool_result') {
-            if (msg.content === CLEAR_MARKER) {
+            if (msg.content !== CLEAR_MARKER) {
                 changed = true
                 result.push({
                     ...msg,

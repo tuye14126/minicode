@@ -12,6 +12,7 @@ import { PermissionManager } from "./permissions.js";
 import { AnthropicModelAdapter } from "./anthropic-adapter.js";
 import { ChatMessage } from "./types.js";
 import { MockModelAdapter } from "./mock-model.js";
+import { createContextCollapseState } from "./compact/context-collapse.js";
 
 
 const runtime = await loadRuntimeConfig()
@@ -76,6 +77,7 @@ async function main() {
   const model = runtime.modelMode === 'mock'
     ? new MockModelAdapter()
     : new AnthropicModelAdapter(loadRuntimeConfig, registry)
+  const contextCollapseState = createContextCollapseState()
 
 
   while (true) {
@@ -150,9 +152,11 @@ async function main() {
         messages,
         maxSteps: 15,
         model,
+        modelName: runtime.model ?? "",
         tools: registry,
         permissions,
-        cwd
+        cwd,
+        contextCollapseState
       })
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1)
       const contextStats = computeContextStats(messages, MODEL)

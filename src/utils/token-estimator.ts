@@ -47,6 +47,7 @@ export type TokenAccountingResult = {
   reason?: string
 }
 
+// 标记消息过时
 export function markProviderUsageStale(
   message: ChatMessage,
   reason: string,
@@ -66,7 +67,7 @@ export function markProviderUsageStale(
   return message
 }
 
-
+// 获取官方token消耗数
 function messageProviderUsage(message: ChatMessage): ProviderUsage | undefined {
   if (
     (message.role === 'assistant' ||
@@ -79,7 +80,7 @@ function messageProviderUsage(message: ChatMessage): ProviderUsage | undefined {
   }
   return undefined
 }
-
+// 计算消息字符数
 function messageContentLength(message: ChatMessage): number {
   switch (message.role) {
     case 'system':
@@ -110,14 +111,14 @@ function messageContentLength(message: ChatMessage): number {
   }
 }
 
-
+// 估算单个消息的token数
 export function estimateMessageTokens(message: ChatMessage): number {
   const ratio = CHARS_PER_TOKEN[message.role] ?? 3.0
   const length = messageContentLength(message)
   return Math.ceil(length / ratio)
 }
 
-
+// 计算整个消息列表的token数
 export function estimateMessagesTokens(messages: ChatMessage[]): number {
   let total = 0
   for (const message of messages) {
@@ -126,9 +127,31 @@ export function estimateMessagesTokens(messages: ChatMessage[]): number {
   return total
 }
 
+function messageBoundaryId(message: ChatMessage): string | undefined {
+  if (message.role === 'assistant_tool_call') return message.toolUseId
+  return undefined
+}
 
+function staleUsageReason(messages: ChatMessage[]): string | undefined {
+  for (const message of messages) {
+    if (
+      (message.role === 'assistant' ||
+        message.role === 'assistant_progress' ||
+        message.role === 'assistant_tool_call') &&
+      message.providerUsage &&
+      message.usageStale
+    ) {
+      return message.usageStaleReason ?? 'provider usage was marked stale'
+    }
+  }
+  return undefined
+}
+
+
+// 对消息的token数进行估算：官方数据+估算数据
 export function tokenCountWithEstimation(messages: ChatMessage[]): TokenAccountingResult {
   for (let i = messages.length - 1; i >= 0; i--) {
+    // 从后往前遍历, 得到官方数据, 后面的消息采用估算的方式
     const usage = messageProviderUsage(messages[i])
     if (!usage) continue
 
@@ -140,16 +163,24 @@ export function tokenCountWithEstimation(messages: ChatMessage[]): TokenAccounti
       estimatedTokens,
       source: estimatedTokens > 0 ? 'provider_usage_plus_estimate' : 'provider_usage',
       isExact: estimatedTokens === 0,
+      usageBoundary: {
+        messageIndex: i,
+        messageId: messageBoundaryId(messages[i])
+      }
     }
 
   }
+  // 如果没有官方的准确数据或者数据已经过时
+  const reason = staleUsageReason(messages)
   const estimatedTokens = estimateMessagesTokens(messages)
   return {
     totalTokens: estimatedTokens,
     providerUsageTokens: 0,
     estimatedTokens,
     source: 'estimate_only',
-    isExact: false
+    isExact: false,
+    stale: Boolean(reason),
+    reason: reason ?? 'no provider usage available',
   }
 
 }

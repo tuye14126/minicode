@@ -1,7 +1,7 @@
 import { ChatMessage, CompressionResult, ModelAdapter } from "../types.js";
 import { estimateMessageTokens, markProviderUsageStale, tokenCountWithEstimation } from "../utils/token-estimator.js";
 import { RETENTION } from "./constants.js";
-import { buildCompactSummaryPrompt, parseSummaryFromResponse } from "./prompts.js";
+import { buildCompactSummaryPrompt, parseSummaryFromResponse } from "./prompt.js";
 
 
 

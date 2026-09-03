@@ -1,3 +1,4 @@
+import { buildAnthropicSnipBoundaryText } from "./compact/snipCompact.js";
 import { RuntimeConfig } from "./config.js";
 import { ToolRegistry } from "./tool.js";
 import { AgentStep, ChatMessage, ModelAdapter, ProviderThinkingBlock, ProviderUsage, StepDiagnostics, ToolCall } from "./types.js";
@@ -100,7 +101,9 @@ function toAnthropicMessages(messages: ChatMessage[]): {
       continue
     }
     if (message.role === 'snip_boundary') {
-
+      pushAnthropicMessage(converted, 'user', toTextBlock(
+        buildAnthropicSnipBoundaryText(),
+      ))
       continue
     }
     pushAnthropicMessage(converted, 'user', {

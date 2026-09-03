@@ -373,6 +373,14 @@ function messageId(message: ChatMessage, index: number): string {
   return message.id ?? `message-${index}`
 }
 
+export function buildAnthropicSnipBoundaryText(): string {
+  return [
+    '[Snipped earlier conversation segment]',
+    '',
+    'A middle portion of the earlier conversation was removed to preserve context space.',
+    'The recent conversation and active task context are preserved.',
+  ].join('\n')
+}
 
 export function buildSnipBoundaryContent(args: {
   removedCount: number
