@@ -1,7 +1,9 @@
+import { abortableDelay, throwIfAborted } from "./abort.js";
 import { buildAnthropicSnipBoundaryText } from "./compact/snipCompact.js";
 import { RuntimeConfig } from "./config.js";
 import { ToolRegistry } from "./tool.js";
-import { AgentStep, ChatMessage, ModelAdapter, ProviderThinkingBlock, ProviderUsage, StepDiagnostics, ToolCall } from "./types.js";
+import { AgentStep, ChatMessage, ModelAdapter, ModelRequestOptions, ProviderThinkingBlock, ProviderUsage, StepDiagnostics, ToolCall } from "./types.js";
+import { resolveMaxOutputTokens } from "./utils/context.js";
 
 
 const DEFAULT_MAX_RETRIES = 4
@@ -285,18 +287,25 @@ function normalizeAnthropicUsage(usage: AnthropicUsage | undefined): ProviderUsa
 
 export class AnthropicModelAdapter implements ModelAdapter {
   constructor(
+    private readonly tools: ToolRegistry,
     private readonly getRuntimeConfig: () => Promise<RuntimeConfig>,
-    private readonly tools: ToolRegistry
   ) { }
 
   /*将自定义的Chatmessages格式的消息转换为Anthropic消息格式, 访问大模型, 得到response后
   再进行解析,得到两种AgentStep格式的返回值, 后续可再将AgentStep转换为ChatMessages格式
   放到messages历史消息中*/
-  async next(messages: ChatMessage[]): Promise<AgentStep> {
+  async next(
+    messages: ChatMessage[],
+    options: ModelRequestOptions = {}
+  ): Promise<AgentStep> {
+    throwIfAborted(options.signal)
     const runtime = await this.getRuntimeConfig()
     const payload = toAnthropicMessages(messages)
     const url = `${runtime.baseUrl.replace(/\/$/, '')}/v1/messages`
-    const maxOutputTokens = runtime.maxOutputTokens ?? 8192
+    const maxOutputTokens = resolveMaxOutputTokens(
+      runtime.model,
+      runtime.maxOutputTokens,
+    )
     const headers: Record<string, string> = {
       'content-type': 'application/json',
       'anthropic-version': '2023-06-01',
@@ -312,7 +321,7 @@ export class AnthropicModelAdapter implements ModelAdapter {
       model: runtime.model,
       system: payload.system,
       messages: payload.messages,
-      tools: this.tools.list().map(tool => ({
+      tools: (options.tools ?? this.tools.list()).map(tool => ({
         name: tool.name,
         description: tool.description,
         input_schema: tool.inputSchema
@@ -325,7 +334,8 @@ export class AnthropicModelAdapter implements ModelAdapter {
       response = await fetch(url, {
         method: 'POST',
         headers,
-        body: JSON.stringify(requestBody)
+        body: JSON.stringify(requestBody),
+        signal: options.signal
       })
       if (response.ok) {
         break
@@ -335,7 +345,10 @@ export class AnthropicModelAdapter implements ModelAdapter {
       }
 
       const retryAfterMs = parseRetryAfterMs(response.headers.get('retry-after'))
-      await sleep(getRetryDelayMs(attempt, retryAfterMs))
+      await abortableDelay(
+        getRetryDelayMs(attempt + 1, retryAfterMs),
+        options.signal,
+      )
     }
 
     if (!response) {

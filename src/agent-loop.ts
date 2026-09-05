@@ -1,4 +1,4 @@
-import { PendingToolResult, replaceLargeToolResult } from './utils/tool-result-storage.js';
+import { ContentReplacementState, PendingToolResult, replaceLargeToolResult, createContentReplacementState, applyToolResultBudget } from './utils/tool-result-storage.js';
 import { ToolRegistry } from './tool.js';
 import { PermissionManager } from './permissions.js';
 import { ChatMessage, CompressionResult, ModelAdapter, ProviderThinkingBlock, ProviderUsage } from './types.js';
@@ -8,6 +8,7 @@ import { snipCompactConversation, SnipCompactResult } from './compact/snipCompac
 import { microcompact } from './compact/microcompact.js';
 import { applyContextCollapseIfNeeded, ContextCollapseResult, ContextCollapseState, createContextCollapseState } from './compact/context-collapse.js';
 import { autoCompact } from './compact/auto-compact.js';
+import { throwIfAborted } from './abort.js';
 export type Message = OpenAI.Chat.Completions.ChatCompletionMessageParam
 function isEmptyAssistantResponse(content: string): boolean {
   return content.trim().length === 0
@@ -98,7 +99,10 @@ export async function runAgentTurn(args: {
   onContextStats?: (stats: import('./utils/token-estimator.js').ContextStats) => void,
   onContextCollapse?: (result: ContextCollapseResult) => void | Promise<void>,
   onAutoCompact?: (result: CompressionResult) => void | Promise<void>,
-  contextCollapseState?: ContextCollapseState
+  contentReplacementState?: ContentReplacementState,
+  contextCollapseState?: ContextCollapseState,
+  signal?: AbortSignal
+
 
 }): Promise<ChatMessage[]> {
   const maxSteps = args.maxSteps ?? 15
@@ -112,6 +116,8 @@ export async function runAgentTurn(args: {
   const modelName = args.modelName ?? ''
   let contextCollapseState =
     args.contextCollapseState ?? createContextCollapseState()
+  const contentReplacementState =
+    args.contentReplacementState ?? createContentReplacementState()
 
   const appendThinkingBlocks = (blocks: ProviderThinkingBlock[] | undefined) => {
     if (!blocks || blocks.length === 0) return
@@ -143,7 +149,7 @@ export async function runAgentTurn(args: {
     ]
   }
   for (let turn = 0; turn < maxSteps; turn++) {
-
+    throwIfAborted(args.signal)
     let latestStats: import('./utils/token-estimator.js').ContextStats | null = null
     // 专门为大模型提供的消息,可能包含折叠视图
     let modelMessages = messages
@@ -154,7 +160,7 @@ export async function runAgentTurn(args: {
         const snipResult = await snipCompactConversation({
           messages,
           contextStats: latestStats,
-          modelContextWindow: latestStats.contextWindow
+          modelContextWindow: latestStats.effectiveInput
         })
         if (snipResult.didSnip) {
           messages = snipResult.messages
@@ -354,6 +360,7 @@ export async function runAgentTurn(args: {
     }> = []
 
     for (const call of agentStep.calls) {
+      throwIfAborted(args.signal)
       args.onToolStart?.(call.toolName, call.input)
       const result = await args.tools.execute(
         call.toolName,
@@ -368,20 +375,30 @@ export async function runAgentTurn(args: {
         toolErrorCount += 1
       }
       args.onToolResult?.(call.toolName, result.output, !result.ok)
-
-      const toolResult = replaceLargeToolResult({
+      // 第一次落盘，处理特别大的工具结果
+      const toolResult = await replaceLargeToolResult({
         role: 'tool_result',
         toolUseId: call.id,
         toolName: call.toolName,
         content: result.output,
         isError: !result.ok
-      })
+      }, contentReplacementState)
       executedToolResults.push({
         call,
         result,
         toolResult
       })
     }
+    // 第二次落盘，处理较小的工具结果，直到整体低于阈值
+    const budgetedResults = await applyToolResultBudget(
+      executedToolResults.map(entry => entry.toolResult),
+      contentReplacementState,
+    )
+
+    const toolResultById = new Map(
+      budgetedResults.results.map(result => [result.toolUseId, result]),
+    )
+
     const toolCallMessages = executedToolResults.map((entry, i) => {
       const toolCallMessage: ChatMessage = {
         role: 'assistant_tool_call',
@@ -395,7 +412,9 @@ export async function runAgentTurn(args: {
       )
     })
 
-    const toolResults = executedToolResults.map(entry => entry.toolResult)
+    const toolResults = executedToolResults.map(entry =>
+      toolResultById.get(entry.call.id) ?? entry.toolResult,
+    )
 
     messages = [
       ...messages,

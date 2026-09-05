@@ -36,6 +36,12 @@ type ReplacementCandidate = {
   size: number
 }
 
+export function createContentReplacementState(): ContentReplacementState {
+  return {
+    seenIds: new Set(),
+    replacements: new Map(),
+  }
+}
 
 // 将工具结果转换为文本
 export function normalizeToolResultContent(content: unknown): string {

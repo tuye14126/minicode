@@ -72,6 +72,18 @@ export type StepDiagnostics = {
 }
 
 
+export type ModelToolDefinition = {
+  name: string
+  description: string
+  inputSchema: Record<string, unknown>
+}
+
+export type ModelRequestOptions = {
+  tools?: ModelToolDefinition[]
+  signal?: AbortSignal
+}
+
+
 // 模型的单步输出类型AgentStep
 export type AgentStep =
   | {
@@ -91,10 +103,11 @@ export type AgentStep =
     diagnostics?: StepDiagnostics
     usage?: ProviderUsage
   }
+
 /*模型消息协议适配接口, 接受ChatMessages抽象层组成的历史消息
 转换为对应格式的消息发给模型, 接受模型的返回消息转换为AgentStep返回*/
 export interface ModelAdapter {
-  next(messages: ChatMessage[]): Promise<AgentStep>
+  next(messages: ChatMessage[], options?: ModelRequestOptions): Promise<AgentStep>
 }
 
 export type CompressionResult = {
