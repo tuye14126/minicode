@@ -81,15 +81,18 @@ function findCandidateRange(messages: ChatMessage[]): {
     return { start: 0, end: 0, reason: 'too_few_messages' }
   }
   const keepRecentStart = Math.max(0, messages.length - SNIP_KEEP_RECENT_MESSAGES)
-  let lastSafeUserIndex = -1
-  for (let i = keepRecentStart; i >= 0; i--) {
+  let lastUserIndex = -1
+  for (let i = messages.length - 1; i >= 0; i--) {
     if (messages[i].role === 'user') {
-      lastSafeUserIndex = i
+      lastUserIndex = i
       break
     }
   }
 
-  const end = lastSafeUserIndex > 0 ? lastSafeUserIndex : keepRecentStart
+  const end = Math.min(
+    keepRecentStart,
+    lastUserIndex >= 0 ? lastUserIndex : messages.length,
+  )
   if (end <= 0) {
     return { start: 0, end: 0, reason: 'no_middle_range' }
   }
@@ -429,7 +432,7 @@ function markRetainedUsageStale(messages: ChatMessage[]): ChatMessage[] {
 
 
 
-// 滑动截断：保留开头和结尾 裁去中间
+// 滑动截断：保留开头和结尾 裁去中间的一段合法连续消息组
 export async function snipCompactConversation(params: {
   messages: ChatMessage[],
   contextStats: ContextStats,

@@ -218,7 +218,10 @@ export async function runAgentTurn(args: {
       }
     }
 
-    const agentStep = await args.model.next(modelMessages)
+    const agentStep = await args.model.next(modelMessages, {
+      tools: args.tools.list(),
+      signal: args.signal,
+    })
 
     if (agentStep.type === 'assistant') {
       const isEmpty = isEmptyAssistantResponse(agentStep.content)

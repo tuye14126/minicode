@@ -68,7 +68,7 @@ describe('Anthropic thinking block round trip', () => {
       authToken: 'test-token',
       sourceSummary: 'test',
     }
-    const adapter = new AnthropicModelAdapter(async () => runtime, tools)
+    const adapter = new AnthropicModelAdapter(tools, async () => runtime,)
     const messages: ChatMessage[] = [
       { role: 'system', content: 'System' },
       { role: 'user', content: 'Summarize this project' },
@@ -143,7 +143,7 @@ describe('Anthropic thinking block round trip', () => {
     }) as typeof fetch
 
     const tools = createEchoTools()
-    const adapter = new AnthropicModelAdapter(async () => createRuntime(), tools)
+    const adapter = new AnthropicModelAdapter(tools, async () => createRuntime())
 
     await runAgentTurn({
       model: adapter,
@@ -222,7 +222,7 @@ describe('Anthropic thinking block round trip', () => {
     }) as typeof fetch
 
     const tools = createEchoTools()
-    const adapter = new AnthropicModelAdapter(async () => createRuntime(), tools)
+    const adapter = new AnthropicModelAdapter(tools, async () => createRuntime())
     const firstTurn = await runAgentTurn({
       model: adapter,
       tools,

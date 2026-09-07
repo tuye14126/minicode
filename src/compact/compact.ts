@@ -6,7 +6,7 @@ import { buildCompactSummaryPrompt, parseSummaryFromResponse } from "./prompt.js
 
 
 // 对消息进行分组
-function groupMessagesByApiRound(messages: ChatMessage[]): ChatMessage[][] {
+export function groupMessagesByApiRound(messages: ChatMessage[]): ChatMessage[][] {
   const groups: ChatMessage[][] = []
 
   for (let i = 0; i < messages.length;) {
@@ -42,7 +42,7 @@ function groupMessagesByApiRound(messages: ChatMessage[]): ChatMessage[][] {
 }
 
 // 遍历消息分组，进行界限对齐，防止后续压缩破坏分组
-function alignBoundaryToApiRound(messages: ChatMessage[], boundary: number): number {
+export function alignBoundaryToApiRound(messages: ChatMessage[], boundary: number): number {
   let start = 0
   for (const group of groupMessagesByApiRound(messages)) {
     const end = start + group.length
@@ -55,7 +55,7 @@ function alignBoundaryToApiRound(messages: ChatMessage[], boundary: number): num
 }
 
 
-function findRetentionBoundary(messages: ChatMessage[]): number {
+export function findRetentionBoundary(messages: ChatMessage[]): number {
   let tokenSum = 0
   let boundary = messages.length
 
@@ -80,7 +80,7 @@ function findRetentionBoundary(messages: ChatMessage[]): number {
 
 }
 // 对需要压缩的消息转换为文字
-function messagesToText(messages: ChatMessage[]): string {
+export function messagesToText(messages: ChatMessage[]): string {
   const parts: string[] = []
   for (const msg of messages) {
     switch (msg.role) {

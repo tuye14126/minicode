@@ -76,7 +76,7 @@ async function main() {
   const permissions = new PermissionManager(cwd, async () => ({ decision: 'allow_once' }))
   const model = runtime.modelMode === 'mock'
     ? new MockModelAdapter()
-    : new AnthropicModelAdapter(loadRuntimeConfig, registry)
+    : new AnthropicModelAdapter(registry, loadRuntimeConfig)
   const contextCollapseState = createContextCollapseState()
 
 

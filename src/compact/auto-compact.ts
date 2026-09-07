@@ -37,7 +37,9 @@ export function resetAutoCompactState(): void {
   state.consecutiveFailures = 0
   state.disabled = false
 }
-
+export function getAutoCompactState(): Readonly<AutoCompactState> {
+  return { ...state }
+}
 export async function autoCompact(
   messages: ChatMessage[],
   model: string,

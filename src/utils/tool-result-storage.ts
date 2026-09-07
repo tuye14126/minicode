@@ -152,7 +152,7 @@ function formatChars(chars: number): string {
 
 export async function replaceLargeToolResult(
   result: Omit<PendingToolResult, 'content'> & { content: unknown },
-  state: ContentReplacementState,
+  state?: ContentReplacementState,
   maybeThreshold = DEFAULT_MAX_RESULT_SIZE_CHARS
 ): Promise<PendingToolResult> {
   const threshold = maybeThreshold
@@ -164,7 +164,7 @@ export async function replaceLargeToolResult(
     content,
   }
   // 查看之前是否已经完成过替换
-  const previousReplacement = state.replacements.get(result.toolUseId)
+  const previousReplacement = state?.replacements.get(result.toolUseId)
   // 如果有, 则直接利用
   if (previousReplacement !== undefined) {
     return {
@@ -174,7 +174,7 @@ export async function replaceLargeToolResult(
   }
   // 如果内容为空的情况
   if (content.trim().length === 0) {
-    state.seenIds.add(result.toolUseId)
+    state?.seenIds.add(result.toolUseId)
     return {
       ...normalizedResult,
       content: `(${result.toolName} completed with no output)`,
@@ -182,8 +182,8 @@ export async function replaceLargeToolResult(
   }
   // 如果内容已经完成落盘替换, 则直接用
   if (isAlreadyPersistedOutput(content)) {
-    state.seenIds.add(result.toolUseId)
-    state.replacements.set(result.toolUseId, content)
+    state?.seenIds.add(result.toolUseId)
+    state?.replacements.set(result.toolUseId, content)
     return normalizedResult
   }
   // 未达到落盘阈值
@@ -197,8 +197,8 @@ export async function replaceLargeToolResult(
   }
   // 构造消息
   const replacement = buildPersistedToolResultMessage(persisted)
-  state.seenIds.add(result.toolUseId)
-  state.replacements.set(result.toolUseId, replacement)
+  state?.seenIds.add(result.toolUseId)
+  state?.replacements.set(result.toolUseId, replacement)
 
   return {
     ...normalizedResult,

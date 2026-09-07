@@ -120,7 +120,7 @@ async function main(): Promise<void> {
 
   const model = runtime.modelMode === 'mock'
     ? new MockModelAdapter()
-    : new AnthropicModelAdapter(loadRuntimeConfig, registry)
+    : new AnthropicModelAdapter(registry, loadRuntimeConfig)
 
   process.stdin.on('data', async (chunk: Buffer) => {
     const event = parseKeyEvent(chunk)
