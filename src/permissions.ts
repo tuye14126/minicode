@@ -200,6 +200,11 @@ export class PermissionManager {
       this.deniedEditPatterns.add(normalizePath(pattern))
     }
   }
+
+  async whenReady(): Promise<void> {
+    await this.ready
+  }
+
   private async persist(): Promise<void> {
     await writePermissionStore({
       allowedDirectoryPrefixes: [...this.allowedDirectoryPrefixes],
@@ -214,7 +219,15 @@ export class PermissionManager {
     this.turnAllowedEdits.clear()
     this.turnAllowAllEdits = false
   }
+  beginTurn(): void {
+    this.turnAllowedEdits.clear()
+    this.turnAllowAllEdits = false
+  }
 
+  endTurn(): void {
+    this.turnAllowedEdits.clear()
+    this.turnAllowAllEdits = false
+  }
   getSummary(): string[] {
     const summary = [`cwd: ${this.workspaceRoot}`]
     if (this.allowedDirectoryPrefixes.size > 0) {

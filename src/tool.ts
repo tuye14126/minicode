@@ -23,6 +23,8 @@ export type ToolDefinition<TInput> = {
 
 export class ToolRegistry {
   private readonly toolsStore: ToolDefinition<unknown>[]
+  private readonly disposers: Array<() => Promise<void>> = []
+
   constructor(
     tools: ToolDefinition<any>[]
   ) {
@@ -62,5 +64,9 @@ export class ToolRegistry {
         output: error instanceof Error ? error.message : String(error),
       }
     }
+  }
+
+  async dispose(): Promise<void> {
+    await Promise.all(this.disposers.map(disposer => disposer()))
   }
 }
