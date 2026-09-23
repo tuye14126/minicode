@@ -1,5 +1,6 @@
 import { CLAUDE_SETTINGS_PATH, loadRuntimeConfig, MINI_CODE_PERMISSIONS_PATH, MINI_CODE_SETTINGS_PATH, saveMiniCodeSettings } from "./config.js"
 import { initializeRepo, renderInitReport } from "./init.js"
+import { discoverInstructionFiles, renderMemoryReport } from "./memory.js"
 import { ToolRegistry } from "./tool.js"
 
 export type SlashCommand = {
@@ -257,10 +258,10 @@ export async function tryHandleLocalCommand(
     return renderInitReport(report)
   }
 
-  // if (input === '/memory') {
-  //   const files = await discoverInstructionFiles(cwd)
-  //   return renderMemoryReport(files, cwd)
-  // }
+  if (input === '/memory') {
+    const files = await discoverInstructionFiles(cwd)
+    return renderMemoryReport(files, cwd)
+  }
 
   if (input === '/model') {
     const runtime = await loadRuntimeConfig()

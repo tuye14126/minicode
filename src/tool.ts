@@ -1,5 +1,7 @@
 import z from "zod"
 import type { PermissionManager } from "./permissions.js"
+import { SkillSummary } from "./skills.js"
+import { McpServerSummary } from "./mcp.js"
 
 
 export type ToolContext = {
@@ -21,14 +23,25 @@ export type ToolDefinition<TInput> = {
   run: (input: TInput, context: ToolContext) => Promise<ToolResult>
 }
 
+type ToolRegistryMetadata = {
+  skills?: SkillSummary[]
+  mcpServers?: McpServerSummary[]
+}
+
+
 export class ToolRegistry {
   private readonly toolsStore: ToolDefinition<unknown>[]
+  private metadataStore: ToolRegistryMetadata
   private readonly disposers: Array<() => Promise<void>> = []
 
   constructor(
-    tools: ToolDefinition<any>[]
+    tools: ToolDefinition<any>[],
+    metadata: ToolRegistryMetadata = {},
+
   ) {
     this.toolsStore = tools
+    this.metadataStore = metadata
+
   }
   list(): ToolDefinition<unknown>[] {
     return this.toolsStore
@@ -36,6 +49,39 @@ export class ToolRegistry {
 
   find(name: string): ToolDefinition<unknown> | undefined {
     return this.toolsStore.find(tool => tool.name === name)
+  }
+
+  subset(names: readonly string[]): ToolRegistry {
+    const allowedNames = new Set(names)
+    return new ToolRegistry(
+      this.toolsStore.filter(tool => allowedNames.has(tool.name)),
+    )
+  }
+
+  getSkills(): SkillSummary[] {
+    return this.metadataStore.skills ?? []
+  }
+
+  getMcpServers(): McpServerSummary[] {
+    return this.metadataStore.mcpServers ?? []
+  }
+
+  setMcpServers(servers: McpServerSummary[]): void {
+    this.metadataStore = {
+      ...this.metadataStore,
+      mcpServers: [...servers],
+    }
+  }
+
+  addTools(nextTools: ToolDefinition<unknown>[]): void {
+    const existingNames = new Set(this.toolsStore.map(tool => tool.name))
+    for (const tool of nextTools) {
+      if (existingNames.has(tool.name)) {
+        continue
+      }
+      this.toolsStore.push(tool)
+      existingNames.add(tool.name)
+    }
   }
   async execute(
     toolName: string,

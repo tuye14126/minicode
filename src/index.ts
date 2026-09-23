@@ -79,7 +79,10 @@ async function main(): Promise<void> {
   let messages: ChatMessage[] = [
     {
       role: 'system',
-      content: await buildSystemPrompt(cwd),
+      content: await buildSystemPrompt(cwd, permissions.getSummary(), {
+        skills: tools.getSkills(),
+        mcpServers: tools.getMcpServers()
+      }),
     },
   ]
   // 工具结果落盘全局状态
@@ -91,7 +94,10 @@ async function main(): Promise<void> {
   async function refreshSystemPrompt(): Promise<void> {
     messages[0] = {
       role: 'system',
-      content: await buildSystemPrompt(cwd),
+      content: await buildSystemPrompt(cwd, permissions.getSummary(), {
+        skills: tools.getSkills(),
+        mcpServers: tools.getMcpServers()
+      }),
     }
   }
 
