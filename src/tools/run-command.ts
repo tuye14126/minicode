@@ -3,6 +3,7 @@ import { promisify } from "node:util";
 import z from "zod";
 import { ToolDefinition } from "../tool.js";
 import { resolveToolPath } from "../workspace.js";
+import { registerBackgroundShellTask } from "../background-tasks.js";
 
 const execFileAsync = promisify(execFile)
 
@@ -211,10 +212,21 @@ export const runCommandTool: ToolDefinition<Input> = {
         stdio: 'ignore'
       })
       child.unref()
+
+
+      const backgroundTask = registerBackgroundShellTask({
+        command: stripTrailingBackgroundOperator(input.command),
+        pid: child.pid ?? -1,
+        cwd: effectiveCwd,
+      })
+
+
       return {
         ok: true,
-        output: `Background command started.`,
+        output: `Background command started.\nTASK: ${backgroundTask.taskId}\nPID: ${backgroundTask.pid}`,
+        backgroundTask,
       }
+
     }
     const result = await execFileAsync(command, args, {
       cwd: effectiveCwd,

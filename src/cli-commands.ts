@@ -205,42 +205,42 @@ export async function tryHandleLocalCommand(
     return formatPermissionSummary(context?.permissionSummary)
   }
 
-  // if (input === '/skills') {
-  //   const skills = context?.tools?.getSkills() ?? []
-  //   if (skills.length === 0) {
-  //     return 'No skills discovered. Add skills under ~/.mini-code/skills/<name>/SKILL.md, .mini-code/skills/<name>/SKILL.md, .claude/skills/<name>/SKILL.md, or ~/.claude/skills/<name>/SKILL.md.'
-  //   }
+  if (input === '/skills') {
+    const skills = context?.tools?.getSkills() ?? []
+    if (skills.length === 0) {
+      return 'No skills discovered. Add skills under ~/.mini-code/skills/<name>/SKILL.md, .mini-code/skills/<name>/SKILL.md, .claude/skills/<name>/SKILL.md, or ~/.claude/skills/<name>/SKILL.md.'
+    }
 
-  //   return skills
-  //     .map(
-  //       skill =>
-  //         `${skill.name}  ${skill.description}  [${skill.source}]`,
-  //     )
-  //     .join('\n')
-  // }
+    return skills
+      .map(
+        skill =>
+          `${skill.name}  ${skill.description}  [${skill.source}]`,
+      )
+      .join('\n')
+  }
 
-  // if (input === '/mcp') {
-  //   const servers = context?.tools?.getMcpServers() ?? []
-  //   if (servers.length === 0) {
-  //     return 'No MCP servers configured. Add mcpServers to ~/.mini-code/settings.json, ~/.mini-code/mcp.json, or project .mcp.json.'
-  //   }
+  if (input === '/mcp') {
+    const servers = context?.tools?.getMcpServers() ?? []
+    if (servers.length === 0) {
+      return 'No MCP servers configured. Add mcpServers to ~/.mini-code/settings.json, ~/.mini-code/mcp.json, or project .mcp.json.'
+    }
 
-  //   return servers
-  //     .map(server => {
-  //       const suffix = server.error ? `  error=${server.error}` : ''
-  //       const protocol = server.protocol ? `  protocol=${server.protocol}` : ''
-  //       const resources =
-  //         server.resourceCount !== undefined
-  //           ? `  resources=${server.resourceCount}`
-  //           : ''
-  //       const prompts =
-  //         server.promptCount !== undefined
-  //           ? `  prompts=${server.promptCount}`
-  //           : ''
-  //       return `${server.name}  status=${server.status}  tools=${server.toolCount}${resources}${prompts}${protocol}${suffix}`
-  //     })
-  //     .join('\n')
-  // }
+    return servers
+      .map(server => {
+        const suffix = server.error ? `  error=${server.error}` : ''
+        const protocol = server.protocol ? `  protocol=${server.protocol}` : ''
+        const resources =
+          server.resourceCount !== undefined
+            ? `  resources=${server.resourceCount}`
+            : ''
+        const prompts =
+          server.promptCount !== undefined
+            ? `  prompts=${server.promptCount}`
+            : ''
+        return `${server.name}  status=${server.status}  tools=${server.toolCount}${resources}${prompts}${protocol}${suffix}`
+      })
+      .join('\n')
+  }
 
   if (input === '/status') {
     const runtime = await loadRuntimeConfig()

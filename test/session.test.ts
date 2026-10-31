@@ -101,7 +101,7 @@ function retainedMessagesAfterCompact(
 }
 
 async function cleanupAll() {
-  try { await rm(MINI_CODE_PROJECTS_DIR, { recursive: true, force: true }) } catch {}
+  try { await rm(MINI_CODE_PROJECTS_DIR, { recursive: true, force: true }) } catch { }
 }
 
 describe('session persistence', () => {
@@ -222,6 +222,7 @@ describe('session persistence', () => {
     await saveSession(cwd, 'append001', msgs2, 2) // already saved 2
 
     const loaded = await loadSession(cwd, 'append001')
+
     assert.equal(loaded!.length, 4)
     assert.equal(loaded![2].content, 'extra user')
     assert.equal(loaded![3].content, 'extra assistant')

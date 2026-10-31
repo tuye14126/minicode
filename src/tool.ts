@@ -12,6 +12,7 @@ export type ToolContext = {
 export type ToolResult = {
   ok: boolean
   output: string
+  backgroundTask?: BackgroundTaskResult
   awaitUser?: boolean
 }
 
@@ -20,7 +21,16 @@ export type ToolDefinition<TInput> = {
   description: string
   inputSchema: Record<string, unknown>
   schema: z.ZodType<TInput>
-  run: (input: TInput, context: ToolContext) => Promise<ToolResult>
+  run(input: TInput, context: ToolContext): Promise<ToolResult>
+}
+
+export type BackgroundTaskResult = {
+  taskId: string
+  type: 'local_bash'
+  command: string
+  pid: number
+  status: 'running' | 'completed' | 'failed'
+  startedAt: number
 }
 
 type ToolRegistryMetadata = {
@@ -83,6 +93,12 @@ export class ToolRegistry {
       existingNames.add(tool.name)
     }
   }
+
+  addDisposer(disposer: () => Promise<void>): void {
+    this.disposers.push(disposer)
+  }
+
+
   async execute(
     toolName: string,
     input: unknown,

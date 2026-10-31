@@ -3,7 +3,7 @@ import { runAgentTurn } from "./agent-loop.js"
 import { buildSystemPrompt } from "./prompt.js";
 // import { compactConversation } from "./compact.js";
 import { loadRuntimeConfig } from "./config.js";
-import { createDefaultToolRegistry } from "./tools/index.js";
+import { createDefaultToolRegistry, hydrateMcpTools, SUB_AGENT_TOOL_NAMES } from "./tools/index.js";
 import { PermissionManager } from "./permissions.js";
 import { AnthropicModelAdapter } from "./anthropic-adapter.js";
 import { ChatMessage } from "./types.js";
@@ -12,6 +12,12 @@ import { applyContextCollapseIfNeeded, createContextCollapseState } from "./comp
 import { maybeHandleManagementCommand } from "./manage-cli.js";
 import { createContentReplacementState } from "./utils/tool-result-storage.js";
 import { completeSlashCommand, findMatchingSlashCommands, tryHandleLocalCommand } from "./cli-commands.js";
+import { SubAgentManager } from "./agents/manager.js";
+import { createSubAgentTools } from "./tools/sub-agents.js";
+import { forkSession } from "./session.js";
+import { runTtyApp } from "./tty-app.js";
+import { summarizeMcpServers } from "./mcp-status.js";
+import { renderBanner } from "./ui.js";
 
 
 
@@ -54,7 +60,7 @@ async function main(): Promise<void> {
   const isInteractiveTerminal = Boolean(process.stdin.isTTY && process.stdout.isTTY)
 
   // 加载运行时配置文件
-  let runtime = null
+  let runtime
   try {
     runtime = await loadRuntimeConfig()
   } catch {
@@ -66,6 +72,13 @@ async function main(): Promise<void> {
     cwd,
     runtime,
   })
+  hydrateMcpTools({
+    cwd,
+    runtime,
+    tools,
+  }).catch(() => {
+    // Keep startup resilient even if some MCP servers fail.
+  })
   // 权限管理
   const permissions = new PermissionManager(cwd)
   await permissions.whenReady()
@@ -75,7 +88,12 @@ async function main(): Promise<void> {
     process.env.MINI_CODE_MODEL_MODE === 'mock'
       ? new MockModelAdapter()
       : new AnthropicModelAdapter(tools, loadRuntimeConfig)
-
+  const subAgents = new SubAgentManager({
+    model,
+    tools: tools.subset(SUB_AGENT_TOOL_NAMES),
+    cwd,
+  })
+  tools.addTools(createSubAgentTools(subAgents))
   let messages: ChatMessage[] = [
     {
       role: 'system',
@@ -96,12 +114,58 @@ async function main(): Promise<void> {
       role: 'system',
       content: await buildSystemPrompt(cwd, permissions.getSummary(), {
         skills: tools.getSkills(),
-        mcpServers: tools.getMcpServers()
+        mcpServers: tools.getMcpServers(),
+        subAgents: { maxConcurrent: subAgents.maxConcurrent },
       }),
     }
   }
 
   try {
+    if (isInteractiveTerminal) {
+      let sessionId = crypto.randomUUID().slice(0, 8)
+      let resolvedResumeTarget = resumeTarget
+
+      if (forkTarget) {
+        const forkedId = await forkSession(cwd, forkTarget)
+        if (forkedId) {
+          sessionId = forkedId
+          resolvedResumeTarget = forkedId
+        } else {
+          console.error(`Session ${forkTarget} not found or empty.`)
+        }
+      }
+
+      await runTtyApp({
+        runtime,
+        tools,
+        model,
+        subAgents,
+        messages,
+        cwd,
+        permissions,
+        contentReplacementState,
+        contextCollapseState,
+        sessionId,
+        alreadySavedCount: 0,
+        resumeTarget: resolvedResumeTarget,
+      })
+      return
+    }
+
+    const mcpStatus = summarizeMcpServers(tools.getMcpServers())
+    console.log(
+      renderBanner(runtime, cwd, permissions.getSummary(), {
+        transcriptCount: 0,
+        messageCount: messages.length,
+        skillCount: tools.getSkills().length,
+        mcpTotalCount: mcpStatus.total,
+        mcpConnectedCount: mcpStatus.connected,
+        mcpConnectingCount: mcpStatus.connecting,
+        mcpErrorCount: mcpStatus.error,
+      }),
+    )
+    console.log('')
+
     const rl = readline.createInterface({
       input: process.stdin,
       output: process.stdout,

@@ -2,14 +2,12 @@ import { ContentReplacementState, PendingToolResult, replaceLargeToolResult, cre
 import { ToolRegistry } from './tool.js';
 import { PermissionManager } from './permissions.js';
 import { ChatMessage, CompressionResult, ModelAdapter, ProviderThinkingBlock, ProviderUsage } from './types.js';
-import { OpenAI } from 'openai/client.js';
 import { computeContextStats } from './utils/token-estimator.js';
 import { snipCompactConversation, SnipCompactResult } from './compact/snipCompact.js';
 import { microcompact } from './compact/microcompact.js';
 import { applyContextCollapseIfNeeded, ContextCollapseResult, ContextCollapseState, createContextCollapseState } from './compact/context-collapse.js';
 import { autoCompact } from './compact/auto-compact.js';
 import { throwIfAborted } from './abort.js';
-export type Message = OpenAI.Chat.Completions.ChatCompletionMessageParam
 function isEmptyAssistantResponse(content: string): boolean {
   return content.trim().length === 0
 }

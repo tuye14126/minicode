@@ -137,11 +137,6 @@ function parseRetryAfterMs(retryAfter: string | null): number | null {
 
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => {
-    setTimeout(resolve, ms)
-  })
-}
 
 function extractErrorMessage(data: unknown, status: number): string {
   if (typeof data === 'string' && data.trim()) {

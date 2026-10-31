@@ -78,9 +78,18 @@ export type ModelToolDefinition = {
   inputSchema: Record<string, unknown>
 }
 
+// 流式输出类型
+export type ModelStreamEvents = {
+  onTextDelta?: (delta: string) => void
+  onThinkingDelta?: (delta: string) => void
+  onToolUseStart?: (toolUseId: string, toolName: string) => void
+  onToolInputDelta?: (toolUseId: string, jsonDelta: string) => void
+}
+
 export type ModelRequestOptions = {
   tools?: ModelToolDefinition[]
   signal?: AbortSignal
+  stream?: ModelStreamEvents
 }
 
 

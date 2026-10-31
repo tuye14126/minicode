@@ -1,5 +1,4 @@
 import path from "node:path"
-import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync } from "node:fs"
 import { ChatMessage } from "./types.js"
 import { MINI_CODE_PROJECTS_DIR } from "./config.js"
 import { appendFile, mkdir, readdir, readFile, rm, stat, unlink } from "node:fs/promises"
