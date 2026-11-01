@@ -61,7 +61,7 @@ import {
 } from './ui.js'
 import type { RuntimeConfig } from './config.js'
 import type { ToolRegistry } from './tool.js'
-import type { ChatMessage, CompressionResult, ModelAdapter } from './types.js'
+import type { ChatMessage, CompressionResult, ModelAdapter, ModelStreamEvents } from './types.js'
 import type { ContextStats } from './utils/token-estimator.js'
 import type { SubAgentManager } from './agents/manager.js'
 import { computeContextStats } from './utils/token-estimator.js'
@@ -1279,7 +1279,7 @@ async function handleInput(
     return false
   }
 
-  if (input.startsWith('/rename ')) {
+  if (input.startsWith('/ ')) {
     const newName = input.slice('/rename '.length).trim()
     if (!newName) {
       pushTranscriptEntry(state, {
@@ -1459,6 +1459,75 @@ async function handleInput(
   const aggregatedEditByEntryId = new Map<number, AggregatedEditProgress>()
   const turnStartedAt = Date.now()
 
+
+  let streamEntryId: number | null = null
+  let streamText = ''
+  let lastStreamRenderAt = 0
+
+  // 把占位条目定格为最终形态。
+  // finalBody 传入时用最终文本（流式/非流式可能有细微差异，以最终为准）；
+  // kind 用于把 assistant 占位替换成 progress（<progress> 步的场景）。
+  const finalizeStreamEntry = (
+    finalBody?: string,
+    kind?: 'assistant' | 'progress',
+    workedForSeconds?: number,
+  ): boolean => {
+    if (streamEntryId === null) return false
+    const entryId = streamEntryId
+    streamEntryId = null
+    const body = finalBody ?? streamText
+    streamText = ''
+    const index = state.transcript.findIndex(item => item.id === entryId)
+    if (index === -1) return false
+    // TranscriptEntry 的 kind 是字面量联合，改 kind 必须整对象替换
+    state.transcript[index] = {
+      id: entryId,
+      kind: kind ?? 'assistant',
+      body,
+      ...(kind === 'assistant' && workedForSeconds !== undefined
+        ? { workedForSeconds }
+        : {}),
+    } as TranscriptEntry
+    state.transcriptScrollOffset = 0
+    rerender()
+    return true
+  }
+  const streamEvents: ModelStreamEvents = {
+    onTextDelta(delta) {
+      // 第一个增量到达：创建占位条目、贴底、状态栏切换
+      if (streamEntryId === null) {
+        streamEntryId = pushTranscriptEntry(state, {
+          kind: 'assistant',
+          body: delta,
+        })
+        streamText = delta
+        state.transcriptScrollOffset = 0
+        setStatus(state, 'Responding...')
+        rerender()
+        return
+      }
+      streamText += delta
+      // 改 body 很便宜，直接改；重绘要节流（50ms 一帧 ≈ 20fps），
+      // 否则长回复的高频 delta 会把终端重绘打爆
+      const entry = state.transcript.find(
+        item => item.id === streamEntryId && item.kind === 'assistant',
+      )
+      if (entry && entry.kind === 'assistant') {
+        entry.body = streamText
+      }
+      const now = Date.now()
+      if (now - lastStreamRenderAt >= 50) {
+        lastStreamRenderAt = now
+        rerender()
+      }
+    },
+    // 思考增量暂不渲染（状态栏已有 Thinking... 动画），接口留空给以后
+    onThinkingDelta() { },
+    onToolUseStart() { },
+    onToolInputDelta() { },
+  }
+
+
   args.permissions.beginTurn()
   try {
     const nextMessages = await runAgentTurn({
@@ -1470,6 +1539,7 @@ async function handleInput(
       modelName: args.runtime?.model ?? '',
       contentReplacementState: args.contentReplacementState,
       contextCollapseState: args.contextCollapseState,
+      stream: streamEvents,
       // 模型往返后更新 token 统计 + 重绘
       onContextStats(stats) {
         state.contextStats = stats
@@ -1535,6 +1605,9 @@ async function handleInput(
         const workedForSeconds = metadata?.final
           ? Math.max(0, Math.floor((Date.now() - turnStartedAt) / 1000))
           : undefined
+        if (finalizeStreamEntry(content, 'assistant', workedForSeconds)) {
+          return
+        }
         pushTranscriptEntry(state, {
           kind: 'assistant',
           body: content,
@@ -1545,6 +1618,9 @@ async function handleInput(
       },
       //  推 progress 类型条目
       onProgressMessage(content) {
+        if (finalizeStreamEntry(content, 'progress')) {
+          return
+        }
         pushTranscriptEntry(state, {
           kind: 'progress',
           body: content,
@@ -1563,6 +1639,7 @@ async function handleInput(
       //  │    └─ 否：pushTranscriptEntry 普通工具条目（body = 入参摘要）
       //  └─ entryId 入队 pendingToolEntries[toolName]，贴底重绘
       onToolStart(toolName, toolInput) {
+        finalizeStreamEntry()
         setStatus(state, `Running ${toolName}...`)
         state.activeTool = toolName
         let entryId: number
@@ -1695,6 +1772,7 @@ async function handleInput(
     await saveSession(args.cwd, args.sessionId, args.messages, args.alreadySavedCount)
     args.alreadySavedCount = args.messages.length - 1
   } catch (error) {
+    finalizeStreamEntry()
     const message = error instanceof Error ? error.message : String(error)
     args.messages.push({
       role: 'assistant',
@@ -1706,6 +1784,7 @@ async function handleInput(
     })
     state.transcriptScrollOffset = 0
   } finally {
+    finalizeStreamEntry()
     args.permissions.endTurn()
     state.isBusy = false
   }

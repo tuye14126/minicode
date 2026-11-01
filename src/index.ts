@@ -267,6 +267,7 @@ async function main(): Promise<void> {
           modelName: runtime?.model ?? '',
           contentReplacementState,
           contextCollapseState,
+          stream: { onTextDelta: d => process.stdout.write(d) },
         })
       } catch (error) {
         const message =

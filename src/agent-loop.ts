@@ -1,7 +1,7 @@
 import { ContentReplacementState, PendingToolResult, replaceLargeToolResult, createContentReplacementState, applyToolResultBudget } from './utils/tool-result-storage.js';
 import { ToolRegistry } from './tool.js';
 import { PermissionManager } from './permissions.js';
-import { ChatMessage, CompressionResult, ModelAdapter, ProviderThinkingBlock, ProviderUsage } from './types.js';
+import { ChatMessage, CompressionResult, ModelAdapter, ModelStreamEvents, ProviderThinkingBlock, ProviderUsage } from './types.js';
 import { computeContextStats } from './utils/token-estimator.js';
 import { snipCompactConversation, SnipCompactResult } from './compact/snipCompact.js';
 import { microcompact } from './compact/microcompact.js';
@@ -99,7 +99,8 @@ export async function runAgentTurn(args: {
   onAutoCompact?: (result: CompressionResult) => void | Promise<void>,
   contentReplacementState?: ContentReplacementState,
   contextCollapseState?: ContextCollapseState,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  stream?: ModelStreamEvents
 
 
 }): Promise<ChatMessage[]> {
@@ -219,6 +220,7 @@ export async function runAgentTurn(args: {
     const agentStep = await args.model.next(modelMessages, {
       tools: args.tools.list(),
       signal: args.signal,
+      stream: args.stream,
     })
 
     if (agentStep.type === 'assistant') {
