@@ -11,6 +11,7 @@ const RED = '\u001b[31m'
 const MAGENTA = '\u001b[35m'
 const BOLD = '\u001b[1m'
 const BLUE = '\u001b[34m'
+const GRAY = '\u001b[90m' // 灰色（16色兼容版）
 const REVERSE = '\u001b[7m' // 反转前景背景，用于选区高亮
 const USER_MESSAGE_BG = '\u001b[48;5;236m' // 用户消息深色背景
 
@@ -185,6 +186,12 @@ function renderTranscriptEntry(entry: TranscriptEntry): string {
   // 黄色加粗标题 `progress`，缩进渲染进度文本
   if (entry.kind === 'progress') {
     return `${YELLOW}${BOLD}progress${RESET}\n${indentBlock(
+      renderMarkdownish(entry.body),
+    )}`
+  }
+
+  if (entry.kind === 'thinking') {
+    return `${GRAY}thinking${RESET}\n${indentBlock(
       renderMarkdownish(entry.body),
     )}`
   }

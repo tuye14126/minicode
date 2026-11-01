@@ -77,6 +77,7 @@ import {
   createContentReplacementState,
   type ContentReplacementState,
 } from './utils/tool-result-storage.js'
+import { stringDisplayWidth } from './tui/chrome.js'
 
 type TtyAppArgs = {
   runtime: RuntimeConfig | null        // 运行时配置（模型等）
@@ -157,6 +158,7 @@ type TranscriptEntryDraft =
   | Omit<Extract<TranscriptEntry, { kind: 'assistant' }>, 'id'>
   | Omit<Extract<TranscriptEntry, { kind: 'progress' }>, 'id'>
   | Omit<Extract<TranscriptEntry, { kind: 'tool' }>, 'id'>
+  | Omit<Extract<TranscriptEntry, { kind: 'thinking' }>, 'id'>
 
 export const WELCOME_CHEW_FRAMES = [
   String.raw`       (\__/)     
@@ -913,6 +915,28 @@ function renderSubAgentFooter(manager: SubAgentManager): string | undefined {
   return `\x1b[1m\x1b[35m● SUB-AGENTS ${manager.runningCount}/${manager.maxConcurrent} RUNNING\x1b[0m`
 }
 
+// 思考过程的"单行 ticker"渲染：折叠空白、只保留最新尾部、按显示宽度裁剪，
+// 保证永远只占一行（CJK 宽度感知）
+function renderThinkingTickerLine(text: string): string {
+  const flat = text.replace(/\s+/g, ' ').trim()
+  const prefix = '✻ '
+  const prefixWidth = stringDisplayWidth(prefix)
+  // 面板两侧留 8 列余量，最少保 20 列
+  const maxWidth = Math.max(20, (process.stdout.columns ?? 80) - 8) - prefixWidth
+  if (stringDisplayWidth(flat) <= maxWidth) {
+    return `${prefix}${flat}`
+  }
+  // 超宽：从尾部往前收集到装满为止，头部用省略号提示被截断
+  let kept = ''
+  for (let i = flat.length - 1; i >= 0; i--) {
+    const candidate = flat[i]! + kept
+    if (stringDisplayWidth(candidate) > maxWidth - 1) break
+    kept = candidate
+  }
+  return `${prefix}…${kept}`
+}
+
+
 // 渲染防抖调度器, 短时间多次调用 `scheduleRender`，只会排队执行一次 `renderNow`，避免高频重绘刷屏
 function createRenderScheduler(renderNow: () => void): () => void {
   let scheduled: NodeJS.Immediate | null = null
@@ -1460,13 +1484,32 @@ async function handleInput(
   const turnStartedAt = Date.now()
 
 
+  // ===== 流式输出支持（含单行思考 ticker） =====
+  // 生命周期：thinking（单行替换）→ text（同位置流式正文）→ finalize（定格）
   let streamEntryId: number | null = null
   let streamText = ''
+  let thinkingText = ''
+  let streamPhase: 'thinking' | 'text' | null = null
   let lastStreamRenderAt = 0
 
-  // 把占位条目定格为最终形态。
-  // finalBody 传入时用最终文本（流式/非流式可能有细微差异，以最终为准）；
-  // kind 用于把 assistant 占位替换成 progress（<progress> 步的场景）。
+  // 直接改占位条目的 body（所有 kind 都有 body 字段）
+  const updateStreamEntryBody = (body: string): void => {
+    const entry = state.transcript.find(item => item.id === streamEntryId)
+    if (entry) {
+      entry.body = body
+    }
+  }
+
+  // 节流重绘：50ms 一帧；force = true 用于状态切换/定格时刻
+  const touchStreamRender = (force = false): void => {
+    const now = Date.now()
+    if (force || now - lastStreamRenderAt >= 50) {
+      lastStreamRenderAt = now
+      rerender()
+    }
+  }
+
+  // 把占位条目定格为最终形态；纯思考步骤（无正文）保留那一行思考
   const finalizeStreamEntry = (
     finalBody?: string,
     kind?: 'assistant' | 'progress',
@@ -1474,15 +1517,33 @@ async function handleInput(
   ): boolean => {
     if (streamEntryId === null) return false
     const entryId = streamEntryId
+    const phase = streamPhase
     streamEntryId = null
-    const body = finalBody ?? streamText
-    streamText = ''
+    streamPhase = null
+
     const index = state.transcript.findIndex(item => item.id === entryId)
+    // 先算 body 再清状态
+    const body =
+      finalBody !== undefined
+        ? finalBody
+        : phase === 'text'
+          ? streamText
+          : undefined // thinking 态被定格：条目当前的单行就是最终形态
+    streamText = ''
+    thinkingText = ''
+
     if (index === -1) return false
-    // TranscriptEntry 的 kind 是字面量联合，改 kind 必须整对象替换
+
+    if (body === undefined) {
+      // 纯思考步骤（思考完直接调工具 / 被中断）：单行思考原样保留
+      state.transcriptScrollOffset = 0
+      touchStreamRender(true)
+      return true
+    }
+
     state.transcript[index] = {
       id: entryId,
-      kind: kind ?? 'assistant',
+      kind: kind ?? (phase === 'thinking' ? 'thinking' : 'assistant'),
       body,
       ...(kind === 'assistant' && workedForSeconds !== undefined
         ? { workedForSeconds }
@@ -1492,37 +1553,69 @@ async function handleInput(
     rerender()
     return true
   }
+
   const streamEvents: ModelStreamEvents = {
-    onTextDelta(delta) {
-      // 第一个增量到达：创建占位条目、贴底、状态栏切换
+    onThinkingDelta(delta) {
+      thinkingText += delta
       if (streamEntryId === null) {
+        // 思考开始：创建 ticker 占位条目（progress 形态，样式上更"轻"）
+        streamEntryId = pushTranscriptEntry(state, {
+          kind: 'thinking',
+          body: renderThinkingTickerLine(thinkingText),
+        })
+        streamPhase = 'thinking'
+        state.transcriptScrollOffset = 0
+        rerender()
+        return
+      }
+      if (streamPhase === 'thinking') {
+        // 思考进行中：单行整体替换（不是追加！）
+        updateStreamEntryBody(renderThinkingTickerLine(thinkingText))
+        touchStreamRender()
+      }
+      // text 阶段又收到 thinking 增量（一条响应里夹了第二段思考）：忽略，不打断正文
+    },
+
+    onTextDelta(delta) {
+      if (streamEntryId === null) {
+        // 没经过思考阶段，直接正文流式（原有行为）
         streamEntryId = pushTranscriptEntry(state, {
           kind: 'assistant',
           body: delta,
         })
         streamText = delta
+        streamPhase = 'text'
         state.transcriptScrollOffset = 0
         setStatus(state, 'Responding...')
         rerender()
         return
       }
+
+      if (streamPhase === 'thinking') {
+        // ★ 思考结束：同一位置切换为正文流式。
+        // kind 从 progress 换成 assistant（字面量联合，必须整对象替换）
+        const index = state.transcript.findIndex(item => item.id === streamEntryId)
+        if (index !== -1) {
+          state.transcript[index] = {
+            id: streamEntryId,
+            kind: 'assistant',
+            body: delta,
+          } as TranscriptEntry
+        }
+        streamPhase = 'text'
+        streamText = delta
+        setStatus(state, 'Responding...')
+        touchStreamRender(true)
+        return
+      }
+
+      // 正文追加（原有行为）
       streamText += delta
-      // 改 body 很便宜，直接改；重绘要节流（50ms 一帧 ≈ 20fps），
-      // 否则长回复的高频 delta 会把终端重绘打爆
-      const entry = state.transcript.find(
-        item => item.id === streamEntryId && item.kind === 'assistant',
-      )
-      if (entry && entry.kind === 'assistant') {
-        entry.body = streamText
-      }
-      const now = Date.now()
-      if (now - lastStreamRenderAt >= 50) {
-        lastStreamRenderAt = now
-        rerender()
-      }
+      updateStreamEntryBody(streamText)
+      touchStreamRender()
     },
-    // 思考增量暂不渲染（状态栏已有 Thinking... 动画），接口留空给以后
-    onThinkingDelta() { },
+
+    // 工具入参增量暂不渲染（onToolStart 的工具面板会展示入参摘要）
     onToolUseStart() { },
     onToolInputDelta() { },
   }
